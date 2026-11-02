@@ -105,8 +105,8 @@ def api_delete_key(key_id: str):
 
 # ---------- 统计 ----------
 @app.get("/api/stats/overview", tags=["stats"])
-def api_stats_overview(force: bool = False):
-    return stats_service.build_overview(force=force)
+def api_stats_overview(force: bool = False, force_tab: Optional[str] = None):
+    return stats_service.build_overview(force=force, force_tabs=[force_tab] if force_tab else None)
 
 
 @app.get("/api/stats/usage-records", tags=["stats"])

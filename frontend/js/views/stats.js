@@ -30,19 +30,25 @@ App.Views.stats = {
       <div class="row" style="margin-bottom:14px">
         <h2 style="font-size:20px">统计概览</h2>
         <div class="spacer"></div>
-        <button class="btn" id="btn-refresh-stats">刷新（实时拉取百炼）</button>
       </div>
       <div id="stats-tabs" class="tabs"></div>
       <div id="stats-body" class="loading">加载中…</div>`;
-    document.getElementById("btn-refresh-stats").onclick = () => this.load(true);
     this.load();
   },
 
-  async load(force = false) {
+  // 每个 tab 有独立刷新：概览=全量(总统计)，tokenplan/harness/free=百炼实时，zhipu=仅智谱，local=重读本地
+  forceQS(force, tab) {
+    if (!force) return "";
+    const m = { tokenplan: "live", harness: "live", free: "live", zhipu: "zhipu", local: "local" };
+    const mod = m[tab];
+    return mod ? `?force_tab=${mod}` : "?force=true";
+  },
+
+  async load(force = false, tab = this._active) {
     const body = document.getElementById("stats-body");
-    body.innerHTML = `<div class="loading">${force ? "正在拉取百炼用量/权益数据…" : "加载统计概览…"}</div>`;
+    body.innerHTML = `<div class="loading">${force ? "刷新中…" : "加载统计概览…"}</div>`;
     try {
-      const data = await API.get("/api/stats/overview" + (force ? "?force=true" : ""));
+      const data = await API.get("/api/stats/overview" + this.forceQS(force, tab));
       this._data = data;
       this.renderTabs();
       this.switchTab(this._active);
@@ -68,13 +74,22 @@ App.Views.stats = {
       b.classList.toggle("active", b.dataset.tab === id));
     const body = document.getElementById("stats-body");
     const data = this._data || {};
+    const label = (this.TABS.find((t) => t.id === id) || {}).label || "";
+    // 每个 tab 内容上方有独立刷新按钮：概览=实时拉取百炼，其余=刷新当前 tab 数据
+    body.innerHTML = `
+      <div class="row" style="justify-content:flex-end;margin-bottom:10px">
+        <button class="btn ghost sm" id="btn-refresh-tab">${id === "overview" ? "刷新（实时拉取百炼）" : `刷新 ${label}`}</button>
+      </div>
+      <div id="stats-tab-content"></div>`;
+    document.getElementById("btn-refresh-tab").onclick = () => this.load(true, id);
+    const content = document.getElementById("stats-tab-content");
     const map = {
-      overview: () => this.tabOverview(body, data),
-      tokenplan: () => this.tabTokenPlan(body, data),
-      harness: () => this.tabHarness(body, data),
-      free: () => this.tabFree(body, data),
-      zhipu: () => this.tabZhipu(body, data),
-      local: () => this.tabLocal(body, data),
+      overview: () => this.tabOverview(content, data),
+      tokenplan: () => this.tabTokenPlan(content, data),
+      harness: () => this.tabHarness(content, data),
+      free: () => this.tabFree(content, data),
+      zhipu: () => this.tabZhipu(content, data),
+      local: () => this.tabLocal(content, data),
     };
     (map[id] || map.overview)();
   },

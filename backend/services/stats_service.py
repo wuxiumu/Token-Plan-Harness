@@ -153,32 +153,35 @@ def zhipu_code_plan() -> dict:
                 "note": str(e)}
 
 
-def build_overview(force: bool = False) -> dict:
-    """综合：本地累计 + 实时云端概览 + 各 Provider 汇总。
+def build_overview(force: bool = False, force_tabs: Optional[list[str]] = None) -> dict:
+    """综合：本地累计 + 实时云端概览 + 各 Provider 汇总 + 智谱 Code Plan。
 
-    缓存策略：默认读缓存为主。
-      - 缓存存在且未满 30 分钟 → 直接返回缓存（不触达百炼 CLI）
-      - 缓存存在但已超过 30 分钟 → 自动重新拉取一次
-      - force=True（手动刷新）→ 总是重新拉取
+    缓存策略：默认读缓存为主（每模块独立缓存，30 分钟）。
+      - force=True：全量强制重新拉取（概览页「刷新」）
+      - force_tabs=[...]：只强制刷新指定模块（live / zhipu / local），其余走缓存
     """
+    force_tabs = set(force_tabs or [])
     s = get_storage()
-    snap = s.get_snapshot(SNAP_NS, "overview")
-    if snap and not force:
-        age = time.time() - snap.get("captured_at_unix", 0)
-        if age < CACHE_TTL:
-            # 命中缓存：用本地计算补齐新字段（providers/zhipu 不触达百炼 CLI）
-            snap.setdefault("providers", _provider_summary())
-            snap.setdefault("zhipu_code_plan", zhipu_code_plan())
-            return snap
-    local = local_stats()
-    live = live_overview()
-    ov = {
+
+    def _mod(name: str, builder, key: str):
+        forced = force or (name in force_tabs)
+        if not forced:
+            snap = s.get_snapshot(SNAP_NS, key)
+            if snap and time.time() - snap.get("_t", 0) < CACHE_TTL:
+                return snap["data"]
+        data = builder()
+        s.set_snapshot(SNAP_NS, key, {"_t": time.time(), "data": data})
+        return data
+
+    local = _mod("local", local_stats, "mod_local")
+    live = _mod("live", live_overview, "mod_live")
+    zhipu = _mod("zhipu", zhipu_code_plan, "mod_zhipu")
+    providers = _provider_summary()  # 读 Key 缓存现算，不单独缓存
+    return {
         "local": local,
         "live": live,
-        "providers": _provider_summary(),
-        "zhipu_code_plan": zhipu_code_plan(),
+        "providers": providers,
+        "zhipu_code_plan": zhipu,
         "captured_at": datetime.now().isoformat(timespec="seconds"),
         "captured_at_unix": time.time(),
     }
-    s.set_snapshot(SNAP_NS, "overview", ov)
-    return ov
