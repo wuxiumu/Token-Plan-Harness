@@ -27,13 +27,36 @@ App.Views.service = {
       <div class="panel">
         <h3>Harness · MCP 服务测试中心</h3>
         <p class="muted">阿里云百炼 Harness 各能力服务，点击卡片进入独立测试页，可独立操作与刷新。</p>
+        <div id="s-global-stats" style="margin-bottom:14px"></div>
         <div id="s-cards" class="card-grid"></div>
       </div>`;
     const wrap = document.getElementById("s-cards");
     wrap.innerHTML = this._items.map((s) => this.card(s)).join("");
     wrap.querySelectorAll("[data-enter]").forEach((b) =>
       b.onclick = () => this.enterService(b.dataset.enter));
+    this.renderGlobalStats();
   },
+
+  async renderGlobalStats() {
+    const el = document.getElementById("s-global-stats");
+    if (!el) return;
+    let s = null;
+    try { s = await API.get("/api/mcp/stats"); } catch (e) { s = null; }
+    if (!s || !s.total) { el.innerHTML = `<div class="muted">暂无调用统计，进入服务测试后可查看统计详情</div>`; return; }
+    const tk = s.tokens || {};
+    const per = (s.by_service || []).map((b) =>
+      `<div class="per-item"><span class="per-name">${fmt.esc(this._svName(b.service_id))}</span><b>${b.count} 次</b><span>${b.ok}/${b.count} 成功</span><span>¥${(b.cost || 0).toFixed(3)}</span><span>${(b.tokens_in || 0) + (b.tokens_out || 0)} tok</span></div>`).join("");
+    el.innerHTML = `<h3 style="margin:0 0 8px">数据统计</h3>
+      <div class="stat-grid">
+        <div class="stat-item"><b>${s.total}</b><span>总调用</span></div>
+        <div class="stat-item"><b>${s.success_rate}%</b><span>成功率</span></div>
+        <div class="stat-item"><b>¥${s.total_cost}</b><span>总成本(估)</span></div>
+        <div class="stat-item"><b>${tk.total || 0}</b><span>总 token</span></div>
+      </div>
+      <div class="per-list">${per}</div>`;
+  },
+
+  _svName(id) { const s = this._items.find((x) => x.id === id); return s ? s.name : id; },
 
   card(s) {
     return `<div class="card">
@@ -65,6 +88,7 @@ App.Views.service = {
         <p class="muted">${fmt.esc(s.desc)} · ${fmt.esc(s.price)} · ${fmt.esc(s.quota)}</p>
         <div id="s-form"></div>
         <div id="s-result" style="margin-top:12px"></div>
+        <div id="s-stats" style="margin-top:18px"></div>
         <div id="s-logs" style="margin-top:18px">
           <div class="log-head">
             <h3 style="margin:0">调用日志</h3>
@@ -79,7 +103,31 @@ App.Views.service = {
       this.renderList();
     };
     this.renderForm(s);
+    this.renderStats(s.id);
     this.renderLogs(s.id);
+  },
+
+  async renderStats(id) {
+    const el = document.getElementById("s-stats");
+    if (!el) return;
+    el.innerHTML = `<h3>数据统计</h3><div class="loading">统计中…</div>`;
+    let s = null;
+    try { s = await API.get(`/api/mcp/stats?service_id=${id}`); } catch (e) { s = null; }
+    if (!s || !s.total) { el.innerHTML = `<h3>数据统计</h3><div class="muted">暂无调用统计，先执行一次测试</div>`; return; }
+    const tk = s.tokens || {};
+    el.innerHTML = `<h3>数据统计</h3>
+      <div class="stat-grid">
+        <div class="stat-item"><b>${s.total}</b><span>总次数</span></div>
+        <div class="stat-item"><b>${s.ok}</b><span>成功</span></div>
+        <div class="stat-item"><b>${s.fail}</b><span>失败</span></div>
+        <div class="stat-item"><b>${s.success_rate}%</b><span>成功率</span></div>
+        <div class="stat-item"><b>${(s.total_elapsed_ms / 1000).toFixed(1)}s</b><span>总耗时</span></div>
+        <div class="stat-item"><b>¥${s.total_cost}</b><span>估算成本</span></div>
+        <div class="stat-item"><b>${tk.input || 0}</b><span>输入 token</span></div>
+        <div class="stat-item"><b>${tk.output || 0}</b><span>输出 token</span></div>
+        <div class="stat-item"><b>${tk.total || 0}</b><span>总 token</span></div>
+      </div>
+      <div class="muted" style="margin-top:6px;font-size:12px">成本为估算（服务基准价）；token 单独统计，未折算金额。</div>`;
   },
 
   renderForm(s) {
@@ -190,6 +238,7 @@ App.Views.service = {
       <span class="log-status ${r.ok ? "ok" : "err"}">${r.ok ? "成功" : "失败"}</span>
       <span class="log-time">${t}</span>
       <span class="log-ms">${r.elapsed_ms}ms</span>
+      <span class="log-cost">¥${((r.cost || 0)).toFixed(4)}</span>
       <span class="log-in muted">${fmt.esc(inSum.slice(0, 70))}${inSum.length > 70 ? "…" : ""}</span>
     </div>`;
   },

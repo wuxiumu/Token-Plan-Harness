@@ -142,7 +142,19 @@ textarea { min-height: 80px; resize: vertical; font-family: inherit; }
 .log-status.err { background: #231414; color: #f0a3a3; }
 .log-time { font-size: 12px; color: var(--muted); white-space: nowrap; }
 .log-ms { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.log-cost { font-size: 12px; color: var(--amber); white-space: nowrap; }
 .log-in { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* --- 数据统计 --- */
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
+.stat-item { background: var(--panel2); border: 1px solid var(--border); border-radius: 8px; padding: 10px; text-align: center; }
+.stat-item b { display: block; font-size: 20px; color: var(--fg, #e5e9f0); }
+.stat-item span { font-size: 12px; color: var(--muted); }
+.per-list { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+.per-item { display: flex; align-items: center; gap: 12px; font-size: 12px; padding: 6px 10px; background: var(--panel2); border: 1px solid var(--border); border-radius: 6px; }
+.per-item .per-name { flex: 1; font-weight: 600; }
+.per-item b { color: var(--amber); }
+.per-item span { color: var(--muted); }
 
 /* --- 日志详情弹窗 --- */
 .modal-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, .55); display: flex; align-items: center; justify-content: center; z-index: 1000; }

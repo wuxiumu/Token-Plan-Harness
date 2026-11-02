@@ -151,6 +151,11 @@ def api_mcp_logs(service_id: str = "", limit: int = 50):
     return {"items": mcp_log_service.list_logs(service_id or None, limit)}
 
 
+@app.get("/api/mcp/stats", tags=["mcp"])
+def api_mcp_stats(service_id: str = ""):
+    return mcp_log_service.stats(service_id or None)
+
+
 # ---------- 访问记录 ----------
 @app.post("/api/access", tags=["access"])
 def api_access_record(body: AccessBody):
