@@ -3,7 +3,7 @@
  * 刷新后从 hash 恢复当前视图与 tab；访问记录随视图切换上报（URL 带 hash）。 */
 window.App = { Views: {} };
 
-const VIEW_NAMES = ["stats", "keys", "trial"];
+const VIEW_NAMES = ["stats", "keys", "trial", "service"];
 let currentView = null;
 
 function parseHash() {
