@@ -104,6 +104,16 @@ textarea { min-height: 80px; resize: vertical; font-family: inherit; }
 .msg.ok { background: #14231a; border: 1px solid #1e3a2a; color: #a7f3c2; }
 .loading { color: var(--muted); padding: 20px; text-align: center; }
 
+/* Tab 切换 */
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 18px; border-bottom: 1px solid var(--border); padding-bottom: 10px; }
+.tab-btn {
+  padding: 8px 16px; border-radius: 8px; cursor: pointer;
+  background: transparent; border: 1px solid var(--border);
+  color: var(--muted); font-size: 13px; transition: .15s;
+}
+.tab-btn:hover { color: var(--text); border-color: var(--accent); }
+.tab-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
 /* 试画对话 */
 .chat-box { background: var(--panel2); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
 .chat-msg { margin-bottom: 10px; }

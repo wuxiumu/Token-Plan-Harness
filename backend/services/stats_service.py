@@ -1,13 +1,16 @@
-"""统计服务：实时拉取百炼用量/权益 + 本地累计用量聚合"""
+"""统计服务：实时拉取百炼用量/权益 + 本地累计用量聚合 + 智谱 Code Plan"""
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import Optional
 
+import httpx
+
 from .. import config
 from ..adapters.bailian_cli import BailianCli
 from ..models import UsageRecord
 from ..storage import get_storage
+from . import key_service
 
 REC_NS = "usage_record"
 SNAP_NS = "stats"
@@ -83,8 +86,75 @@ def live_overview() -> dict:
     return out
 
 
+def _provider_summary() -> dict:
+    """各 Provider 的 Key 数量/类型/是否已配置 env，供概览 tab 展示。"""
+    keys = key_service.list_keys(show_secret=False)
+    out: dict = {}
+    for pid, meta in config.PROVIDERS.items():
+        ks = [k for k in keys if k.get("provider") == pid]
+        out[pid] = {
+            "name": meta["name"],
+            "kind": meta["kind"],
+            "key_count": len(ks),
+            "kinds": sorted({k.get("kind", "") for k in ks}),
+            "env_configured": bool(config.provider_env_value(pid)),
+        }
+    return out
+
+
+# 智谱 Code Plan 用量监控端点（来自官方 glm-plan-usage 插件源码）
+ZHIPU_USAGE_URL = "https://open.bigmodel.cn/api/monitor/usage/quota/limit"
+_ZHIPU_UNIT = {3: "每5小时", 6: "每周"}
+
+
+def zhipu_code_plan() -> dict:
+    """智谱 GLM Code Plan 订阅用量（真实拉取）。
+
+    端点 GET {host}/api/monitor/usage/quota/limit，Authorization: Coding-Plan Key。
+    返回每5小时 + 每周积分额度、已用/剩余/百分比/下次重置。
+    """
+    key = config.ZHIPU_TOKENPLAN_API_KEY or config.provider_env_value("zhipu")
+    if not key:
+        return {
+            "configured": False, "status": "not_configured",
+            "level": None, "periods": [],
+            "note": "在 .env 配置 ZHIPU_TOKENPLAN_API_KEY 后自动接入用量",
+        }
+    try:
+        r = httpx.get(
+            ZHIPU_USAGE_URL,
+            headers={"Authorization": key, "Content-Type": "application/json",
+                     "Accept-Language": "zh-CN,zh"},
+            timeout=15,
+        )
+        if r.status_code != 200:
+            return {"configured": True, "status": "error", "level": None, "periods": [],
+                    "note": f"HTTP {r.status_code}: {r.text[:160]}"}
+        body = r.json()
+        data = body.get("data") or {}
+        periods = []
+        for it in data.get("limits", []):
+            periods.append({
+                "unit": _ZHIPU_UNIT.get(it.get("unit"), f"单位{it.get('unit')}"),
+                "total": it.get("usage", 0),
+                "used": it.get("currentValue", 0),
+                "remaining": it.get("remaining", 0),
+                "percentage": it.get("percentage", 0),
+                "next_reset_ms": it.get("nextResetTime"),
+            })
+        return {
+            "configured": True, "status": "ok",
+            "level": data.get("level"),
+            "periods": periods,
+            "note": "",
+        }
+    except Exception as e:
+        return {"configured": True, "status": "error", "level": None, "periods": [],
+                "note": str(e)}
+
+
 def build_overview(force: bool = False) -> dict:
-    """综合：本地累计 + 实时云端概览。
+    """综合：本地累计 + 实时云端概览 + 各 Provider 汇总。
 
     缓存策略：默认读缓存为主。
       - 缓存存在且未满 30 分钟 → 直接返回缓存（不触达百炼 CLI）
@@ -96,12 +166,17 @@ def build_overview(force: bool = False) -> dict:
     if snap and not force:
         age = time.time() - snap.get("captured_at_unix", 0)
         if age < CACHE_TTL:
+            # 命中缓存：用本地计算补齐新字段（providers/zhipu 不触达百炼 CLI）
+            snap.setdefault("providers", _provider_summary())
+            snap.setdefault("zhipu_code_plan", zhipu_code_plan())
             return snap
     local = local_stats()
     live = live_overview()
     ov = {
         "local": local,
         "live": live,
+        "providers": _provider_summary(),
+        "zhipu_code_plan": zhipu_code_plan(),
         "captured_at": datetime.now().isoformat(timespec="seconds"),
         "captured_at_unix": time.time(),
     }

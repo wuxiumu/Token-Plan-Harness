@@ -4,17 +4,18 @@ from pydantic import BaseModel, Field
 
 
 class KeyItem(BaseModel):
-    """一条 API Key（阿里云百炼 / DashScope 为主）"""
+    """一条 API Key（多 Provider：阿里云百炼 / 智谱 / OpenAI / DeepSeek / Kimi）"""
 
     id: str
+    provider: str = "aliyun"   # 所属平台：aliyun | zhipu | openai | deepseek | kimi
     name: str
-    kind: str = "dashscope"  # dashscope | token_plan | other
-    api_key: str = ""        # 明文，仅本地存储；对外返回时掩码
+    kind: str = "dashscope"    # 平台内类型：dashscope | token_plan | harness | code_plan | general | other
+    api_key: str = ""          # 明文，仅本地存储；对外返回时掩码
     base_url: Optional[str] = None
     workspace_id: Optional[str] = None
     models: list[str] = Field(default_factory=list)
     note: str = ""
-    status: str = "active"   # active | disabled | expired
+    status: str = "active"     # active | disabled | expired
     expire_at: Optional[str] = None
     created_at: str = ""
     updated_at: str = ""

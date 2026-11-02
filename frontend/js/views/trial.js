@@ -1,5 +1,5 @@
-/* 多模型试画视图 */
-/* 新手友好的 Demo 场景：点击自动填入 prompt 并切换推荐模型 */
+/* 多模型试画视图（多 Provider：按平台选 Key + 模型） */
+/* 新手友好的 Demo 场景：点击自动填入 prompt 并切换到推荐平台/模型 */
 const TRIAL_DEMOS = [
   { label: "🎯 通俗讲概念", prompt: "用 3 句话 + 生活比喻，向完全不懂技术的人解释什么是「神经网络」。", model: "qwen3.8-max" },
   { label: "🌍 中英日互译", prompt: "把这句话翻译成英文和日文，保留原意：\n「工欲善其事，必先利其器。」", model: "qwen3.8-max" },
@@ -14,12 +14,17 @@ const TRIAL_DEMOS = [
 ];
 
 App.Views.trial = {
+  _providers: [],
+  _keys: [],
+  _models: [],
+
   async init() {
     const el = document.getElementById("view-trial");
     el.innerHTML = `
       <div class="panel">
         <h3>多模型试画</h3>
         <div class="row" style="margin-bottom:12px">
+          <div style="flex:1;min-width:150px"><label>选择平台</label><select id="t-provider"></select></div>
           <div style="flex:1;min-width:200px"><label>选择 Key</label><select id="t-key"></select></div>
           <div style="flex:1;min-width:200px"><label>选择模型</label><select id="t-model"></select></div>
         </div>
@@ -37,7 +42,7 @@ App.Views.trial = {
       <div class="panel">
         <h3>试画记录</h3>
         <table>
-          <thead><tr><th>时间</th><th>模型</th><th>Prompt</th><th>Token</th><th>状态</th></tr></thead>
+          <thead><tr><th>时间</th><th>平台</th><th>模型</th><th>Prompt</th><th>Token</th><th>状态</th></tr></thead>
           <tbody id="t-history"></tbody>
         </table>
       </div>`;
@@ -55,30 +60,62 @@ App.Views.trial = {
       b.onclick = () => {
         const d = TRIAL_DEMOS[+b.dataset.demo];
         document.getElementById("t-prompt").value = d.prompt;
-        const m = document.getElementById("t-model");
-        if ([...m.options].some((o) => o.value === d.model)) m.value = d.model;
+        const provId = this._findProviderOfModel(d.model);
+        if (provId) {
+          const ps = document.getElementById("t-provider");
+          if ([...ps.options].some((o) => o.value === provId)) ps.value = provId;
+          this.refreshKeyModel();
+          const m = document.getElementById("t-model");
+          if ([...m.options].some((o) => o.value === d.model)) m.value = d.model;
+        }
         document.getElementById("t-result").innerHTML = "";
-        document.getElementById("t-status").textContent = `已填入「${d.label}」· 推荐模型 ${d.model}`;
+        document.getElementById("t-status").textContent =
+          `已填入「${d.label}」· 推荐平台 ${provId || "当前"} / 模型 ${d.model}`;
       });
+  },
+
+  _findProviderOfModel(model) {
+    for (const k of this._keys) {
+      if ((k.models || []).includes(model)) return k.provider;
+    }
+    return null;
   },
 
   async loadMeta() {
     try {
-      const [{ items }, { models }] = await Promise.all([
-        API.get("/api/keys"), API.get("/api/trial/models"),
+      const [prov, keysRes, modelsRes] = await Promise.all([
+        API.get("/api/providers"), API.get("/api/keys"), API.get("/api/trial/models"),
       ]);
-      const keySel = document.getElementById("t-key");
-      keySel.innerHTML = items.map((k) =>
-        `<option value="${k.id}">${fmt.esc(k.name)} (${fmt.esc(k.api_key)})</option>`).join("") ||
-        `<option value="">请先在 Key 管理中添加 Key</option>`;
-      const modelSel = document.getElementById("t-model");
-      modelSel.innerHTML = models.map((m) => `<option>${fmt.esc(m)}</option>`).join("");
-      if (items.length === 0) {
-        document.getElementById("t-send").disabled = true;
-        document.getElementById("t-status").textContent = "无可用 Key，先到 Key 管理添加。";
-      }
+      this._providers = prov.providers;
+      this._keys = keysRes.items;
+      this._models = modelsRes.models;
+      const ps = document.getElementById("t-provider");
+      ps.innerHTML = `<option value="">全部平台</option>` +
+        this._providers.map((p) => `<option value="${p.id}">${fmt.esc(p.name)}</option>`).join("");
+      ps.onchange = () => this.refreshKeyModel();
+      this.refreshKeyModel();
     } catch (e) {
       document.getElementById("t-status").textContent = e.message;
+    }
+  },
+
+  refreshKeyModel() {
+    const pid = document.getElementById("t-provider").value;
+    const keys = pid ? this._keys.filter((k) => k.provider === pid) : this._keys;
+    const keySel = document.getElementById("t-key");
+    keySel.innerHTML = keys.map((k) =>
+      `<option value="${k.id}">${fmt.esc(k.name)} (${fmt.esc(k.api_key)})</option>`).join("") ||
+      `<option value="">请先在 Key 管理添加该平台 Key</option>`;
+    const models = new Set();
+    keys.forEach((k) => (k.models || []).forEach((m) => models.add(m)));
+    this._models.forEach((m) => models.add(m));
+    const modelSel = document.getElementById("t-model");
+    modelSel.innerHTML = [...models].map((m) => `<option>${fmt.esc(m)}</option>`).join("");
+    if (keys.length === 0) {
+      document.getElementById("t-send").disabled = true;
+      document.getElementById("t-status").textContent = "无可用 Key，先到 Key 管理添加。";
+    } else {
+      document.getElementById("t-send").disabled = false;
     }
   },
 
@@ -119,17 +156,26 @@ App.Views.trial = {
     const tb = document.getElementById("t-history");
     try {
       const { items } = await API.get("/api/trial/records");
-      if (!items.length) { tb.innerHTML = `<tr><td colspan="5" class="muted">暂无记录</td></tr>`; return; }
+      if (!items.length) { tb.innerHTML = `<tr><td colspan="6" class="muted">暂无记录</td></tr>`; return; }
+      // 平台映射：从 key_id 找 key 的 provider
+      const idToProv = {};
+      this._keys.forEach((k) => { idToProv[k.id] = k.provider; });
       tb.innerHTML = items.map((r) => `
         <tr>
           <td>${fmt.maskTime(r.created_at)}</td>
+          <td><span class="tag">${fmt.esc(this.providerName(idToProv[r.key_id]))}</span></td>
           <td class="code">${fmt.esc(r.model)}</td>
           <td title="${fmt.esc(r.prompt)}">${fmt.esc((r.prompt || "").slice(0, 40))}</td>
           <td>${r.usage ? ((r.usage.prompt_tokens || 0) + (r.usage.completion_tokens || 0)) : "—"}</td>
           <td>${r.success ? `<span class="tag green">成功</span>` : `<span class="tag red">失败</span>`}</td>
         </tr>`).join("");
     } catch (e) {
-      tb.innerHTML = `<tr><td colspan="5" class="msg err">${fmt.esc(e.message)}</td></tr>`;
+      tb.innerHTML = `<tr><td colspan="6" class="msg err">${fmt.esc(e.message)}</td></tr>`;
     }
+  },
+
+  providerName(pid) {
+    const p = this._providers.find((x) => x.id === pid);
+    return p ? p.name : pid || "—";
   },
 };

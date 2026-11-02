@@ -32,6 +32,7 @@ app.add_middleware(
 class KeyCreate(BaseModel):
     name: str
     api_key: str
+    provider: str = "aliyun"
     kind: str = "dashscope"
     base_url: Optional[str] = None
     workspace_id: Optional[str] = None
@@ -44,6 +45,7 @@ class KeyCreate(BaseModel):
 class KeyPatch(BaseModel):
     name: Optional[str] = None
     api_key: Optional[str] = None
+    provider: Optional[str] = None
     kind: Optional[str] = None
     base_url: Optional[str] = None
     workspace_id: Optional[str] = None
@@ -61,6 +63,15 @@ class ChatBody(BaseModel):
 
 
 # ---------- Key 管理 ----------
+@app.get("/api/providers", tags=["keys"])
+def api_providers():
+    return {"providers": [
+        {"id": pid, "name": meta["name"], "kind": meta["kind"],
+         "base_url": meta["base_url"], "models": meta["default_models"]}
+        for pid, meta in config.PROVIDERS.items()
+    ]}
+
+
 @app.post("/api/keys", tags=["keys"])
 def api_create_key(body: KeyCreate):
     return key_service.create_key(body.model_dump())

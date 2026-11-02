@@ -1,13 +1,25 @@
-/* 统计概览视图（含可视化） */
+/* 统计概览视图（多 tab：概览 / TokenPlan / Harness / 免费额度 / 智谱 / 本地用量） */
 App.Views.stats = {
+  TABS: [
+    { id: "overview", label: "概览" },
+    { id: "tokenplan", label: "Token Plan" },
+    { id: "harness", label: "Harness 权益" },
+    { id: "free", label: "免费额度" },
+    { id: "zhipu", label: "智谱 Code Plan" },
+    { id: "local", label: "本地用量" },
+  ],
+  _data: null,
+  _active: "overview",
+
   async init() {
     const el = document.getElementById("view-stats");
     el.innerHTML = `
-      <div class="row" style="margin-bottom:18px">
+      <div class="row" style="margin-bottom:14px">
         <h2 style="font-size:20px">统计概览</h2>
         <div class="spacer"></div>
         <button class="btn" id="btn-refresh-stats">刷新（实时拉取百炼）</button>
       </div>
+      <div id="stats-tabs" class="tabs"></div>
       <div id="stats-body" class="loading">加载中…</div>`;
     document.getElementById("btn-refresh-stats").onclick = () => this.load(true);
     this.load();
@@ -18,22 +30,46 @@ App.Views.stats = {
     body.innerHTML = `<div class="loading">${force ? "正在拉取百炼用量/权益数据…" : "加载统计概览…"}</div>`;
     try {
       const data = await API.get("/api/stats/overview" + (force ? "?force=true" : ""));
-      this.render(body, data);
+      this._data = data;
+      this.renderTabs();
+      this.switchTab(this._active);
     } catch (e) {
       body.innerHTML = `<div class="msg err">${fmt.esc(e.message)}</div>`;
     }
   },
 
-  render(body, data) {
-    const live = data.live || {};
-    const local = data.local || {};
-    const tp = live.token_plan || {};
-    const sum = live.usage_summary || {};
-    const pct = tp.per1MonthPercentage ?? 0;
-    const harness = live.harness_official_tool || {};
-    const harnessItems = Array.isArray(harness.items) ? harness.items : [];
-    const free = Array.isArray(live.usage_free) ? live.usage_free : [];
+  renderTabs() {
+    const wrap = document.getElementById("stats-tabs");
+    wrap.innerHTML = this.TABS.map((t) =>
+      `<button class="tab-btn ${t.id === this._active ? "active" : ""}" data-tab="${t.id}">${t.label}</button>`).join("");
+    wrap.querySelectorAll("[data-tab]").forEach((b) =>
+      b.onclick = () => this.switchTab(b.dataset.tab));
+  },
 
+  switchTab(id) {
+    this._active = id;
+    document.querySelectorAll("#stats-tabs .tab-btn").forEach((b) =>
+      b.classList.toggle("active", b.dataset.tab === id));
+    const body = document.getElementById("stats-body");
+    const data = this._data || {};
+    const map = {
+      overview: () => this.tabOverview(body, data),
+      tokenplan: () => this.tabTokenPlan(body, data),
+      harness: () => this.tabHarness(body, data),
+      free: () => this.tabFree(body, data),
+      zhipu: () => this.tabZhipu(body, data),
+      local: () => this.tabLocal(body, data),
+    };
+    (map[id] || map.overview)();
+  },
+
+  /* ---- Tab: 概览 ---- */
+  tabOverview(body, data) {
+    const live = data.live || {}, local = data.local || {}, prov = data.providers || {};
+    const tp = live.token_plan || {};
+    const pct = tp.per1MonthPercentage ?? 0;
+    const harnessItems = Array.isArray(live.harness_official_tool?.items) ? live.harness_official_tool.items : [];
+    const zc = data.zhipu_code_plan || {};
     body.innerHTML = `
       <div class="cards">
         <div class="card">
@@ -59,6 +95,24 @@ App.Views.stats = {
       </div>
 
       <div class="panel">
+        <h3>多 Provider 概览（Key 管理）</h3>
+        ${this.providersTable(prov)}
+      </div>
+
+      <div class="panel">
+        <h3>智谱 Code Plan</h3>
+        ${this.zhipuStatus(zc)}
+      </div>`;
+  },
+
+  /* ---- Tab: Token Plan ---- */
+  tabTokenPlan(body, data) {
+    const live = data.live || {};
+    const tp = live.token_plan || {};
+    const sum = live.usage_summary || {};
+    const pct = tp.per1MonthPercentage ?? 0;
+    body.innerHTML = `
+      <div class="panel">
         <h3>Token Plan 配额</h3>
         <div class="two-col">
           <div><div id="chart-tokenplan" class="chart" style="height:260px"></div></div>
@@ -75,8 +129,16 @@ App.Views.stats = {
             </table>
           </div>
         </div>
-      </div>
+      </div>`;
+    this.drawTokenPlan(pct, tp);
+  },
 
+  /* ---- Tab: Harness ---- */
+  tabHarness(body, data) {
+    const live = data.live || {};
+    const harness = live.harness_official_tool || {};
+    const harnessItems = Array.isArray(harness.items) ? harness.items : [];
+    body.innerHTML = `
       <div class="panel">
         <h3>Harness 权益额度（official_tool）${harness.generatedAt ? `· 更新于 ${fmt.maskTime(harness.generatedAt)}` : ""}</h3>
         ${harnessItems.length ? `
@@ -95,13 +157,58 @@ App.Views.stats = {
           </tbody>
         </table>` : `<div class="muted">暂无 official_tool 权益数据</div>`}
         <div class="muted" style="margin-top:8px;font-size:12px">基础设施(inrastructure)权益：${(live.harness_infrastructure && live.harness_infrastructure.items?.length) ? `${live.harness_infrastructure.items.length} 项` : "无"}</div>
-      </div>
+      </div>`;
+  },
 
+  /* ---- Tab: 免费额度 ---- */
+  tabFree(body, data) {
+    const free = Array.isArray(data.live?.usage_free) ? data.live.usage_free : [];
+    body.innerHTML = `
       <div class="panel">
         <h3>免费额度（按到期排序）</h3>
         ${this.freeTable(free)}
-      </div>
+      </div>`;
+  },
 
+  /* ---- Tab: 智谱 Code Plan ---- */
+  tabZhipu(body, data) {
+    const zc = data.zhipu_code_plan || {};
+    const prov = data.providers || {};
+    const zp = prov.zhipu || {};
+    const periods = Array.isArray(zc.periods) ? zc.periods : [];
+    let table;
+    if (zc.status === "ok" && periods.length) {
+      table = `<table>
+        <thead><tr><th>周期</th><th>总额度</th><th>已用</th><th>剩余</th><th>使用%</th><th>下次重置</th></tr></thead>
+        <tbody>${periods.map((p) => `
+          <tr>
+            <td>${fmt.esc(p.unit)}</td>
+            <td>${fmt.num(p.total)}</td>
+            <td>${fmt.num(p.used)}</td>
+            <td>${fmt.num(p.remaining)}</td>
+            <td>${this.percentBar(p.percentage)}</td>
+            <td>${fmt.maskTime(p.next_reset_ms)}</td>
+          </tr>`).join("")}</tbody></table>`;
+    } else if (zc.status === "error") {
+      table = `<div class="msg err">${fmt.esc(zc.note)}</div>`;
+    } else {
+      table = `<div class="muted" style="margin-top:10px">${fmt.esc(zc.note)}</div>`;
+    }
+    body.innerHTML = `
+      <div class="panel">
+        <h3>智谱 GLM Code Plan（bigmodel.cn）${zc.level ? ` <span class="tag">${fmt.esc(zc.level)} 套餐</span>` : ""}</h3>
+        <p style="margin-bottom:8px">状态：${this.zhipuBadge(zc.status)} · ${fmt.num(zp.key_count || 0)} 个智谱 Key${zp.env_configured ? " · 已配置 .env" : ""}</p>
+        ${table}
+        <div class="muted" style="margin-top:12px;font-size:12px">
+          套餐积分额度：Lite 每5小时 2000 / 每周 10000 · Pro 每5小时 12000 / 每周 60000 · Max 每5小时 28000 / 每周 140000。
+        </div>
+      </div>`;
+  },
+
+  /* ---- Tab: 本地用量 ---- */
+  tabLocal(body, data) {
+    const local = data.local || {};
+    body.innerHTML = `
       <div class="panel">
         <h3>本地用量分布（按模型）</h3>
         <div class="two-col">
@@ -112,9 +219,38 @@ App.Views.stats = {
           </div>
         </div>
       </div>`;
-
-    this.drawTokenPlan(pct, tp);
     this.drawModels(local.by_model || {});
+  },
+
+  /* ---- 辅助渲染 ---- */
+  providersTable(prov) {
+    const rows = Object.entries(prov).map(([pid, p]) => `
+      <tr>
+        <td><span class="tag">${fmt.esc(p.name)}</span></td>
+        <td>${p.kind === "quota" ? "配额类" : "通用 OpenAI 兼容"}</td>
+        <td>${fmt.num(p.key_count)} 个 Key</td>
+        <td>${(p.kinds || []).join(", ") || "—"}</td>
+        <td>${p.env_configured ? `<span class="tag green">已配置</span>` : `<span class="tag amber">待填 .env</span>`}</td>
+      </tr>`).join("");
+    return `<table>
+      <thead><tr><th>平台</th><th>类型</th><th>Key</th><th>类型明细</th><th>.env 配置</th></tr></thead>
+      <tbody>${rows}</tbody></table>`;
+  },
+
+  zhipuBadge(s) {
+    const map = {
+      ok: ["green", "已接入"],
+      error: ["red", "查询失败"],
+      env_ready: ["amber", "已配 Key，待接入"],
+      not_configured: ["red", "未配置"],
+    };
+    const [c, label] = map[s] || ["", s];
+    return `<span class="tag ${c}">${label}</span>`;
+  },
+
+  zhipuStatus(zc) {
+    return `<p style="margin-bottom:8px">状态：${this.zhipuBadge(zc.status || "not_configured")} · ${fmt.num(zc.key_count || 0)} 个智谱 Key</p>
+      <div class="muted" style="font-size:12px">${fmt.esc(zc.note || "")}</div>`;
   },
 
   percentBar(p) {
@@ -122,7 +258,7 @@ App.Views.stats = {
     const color = v > 80 ? "var(--red)" : v > 50 ? "var(--amber)" : "var(--green)";
     return `<div style="display:flex;align-items:center;gap:6px">
       <div style="width:70px;height:6px;background:var(--panel2);border-radius:3px;overflow:hidden">
-        <div style="width:${Math.min(v,100)}%;height:100%;background:${color}"></div>
+        <div style="width:${Math.min(v, 100)}%;height:100%;background:${color}"></div>
       </div><span>${v}%</span></div>`;
   },
 
@@ -181,12 +317,12 @@ App.Views.stats = {
   drawModels(byModel) {
     const el = document.getElementById("chart-models");
     if (!el) return;
-    const chart = echarts.init(el);
     const rows = Object.entries(byModel).sort((a, b) => b[1].tokens - a[1].tokens);
     if (!rows.length) {
       el.innerHTML = `<div class="muted" style="padding:20px">暂无数据</div>`;
       return;
     }
+    const chart = echarts.init(el);
     chart.setOption({
       tooltip: { trigger: "axis" },
       grid: { left: 60, right: 20, top: 20, bottom: 40 },
