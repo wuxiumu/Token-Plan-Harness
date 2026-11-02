@@ -101,8 +101,34 @@ App.Views.stats = {
 
       <div class="panel">
         <h3>智谱 Code Plan</h3>
-        ${this.zhipuStatus(zc)}
+        ${this.zhipuStatus(zc, (prov.zhipu || {}).key_count || 0)}
+      </div>
+
+      <div class="panel">
+        <h3>最近访问页面</h3>
+        <div id="ov-access"><span class="muted">加载中…</span></div>
       </div>`;
+    this.loadAccessPanel();
+  },
+
+  async loadAccessPanel() {
+    const el = document.getElementById("ov-access");
+    if (!el) return;
+    try {
+      const { items } = await API.get("/api/access/records?limit=10");
+      if (!items.length) { el.innerHTML = `<div class="muted">暂无访问记录</div>`; return; }
+      const names = { stats: "统计概览", keys: "Key 管理", trial: "多模型试画" };
+      el.innerHTML = `<table>
+        <thead><tr><th>时间</th><th>页面</th><th>URL</th></tr></thead>
+        <tbody>${items.map((r) => `
+          <tr>
+            <td>${fmt.maskTime(r.created_at)}</td>
+            <td><span class="tag">${fmt.esc(names[r.view] || r.view || "—")}</span></td>
+            <td class="code" title="${fmt.esc(r.url)}">${fmt.esc((r.url || "").slice(0, 60))}</td>
+          </tr>`).join("")}</tbody></table>`;
+    } catch (e) {
+      el.innerHTML = `<span class="muted">${fmt.esc(e.message)}</span>`;
+    }
   },
 
   /* ---- Tab: Token Plan ---- */
@@ -248,8 +274,8 @@ App.Views.stats = {
     return `<span class="tag ${c}">${label}</span>`;
   },
 
-  zhipuStatus(zc) {
-    return `<p style="margin-bottom:8px">状态：${this.zhipuBadge(zc.status || "not_configured")} · ${fmt.num(zc.key_count || 0)} 个智谱 Key</p>
+  zhipuStatus(zc, keyCount = 0) {
+    return `<p style="margin-bottom:8px">状态：${this.zhipuBadge(zc.status || "not_configured")} · ${fmt.num(keyCount)} 个智谱 Key</p>
       <div class="muted" style="font-size:12px">${fmt.esc(zc.note || "")}</div>`;
   },
 

@@ -88,20 +88,29 @@ def bootstrap_default_key() -> None:
             )
             s.set_obj(NS, item.id, item.model_dump())
 
-    # 2) 各 Provider 的 .env / 环境变量 Key
+    # 2) 各 Provider 的 .env / 环境变量 Key（含阿里云百炼通用 Key）
     for pid, meta in config.PROVIDERS.items():
-        if pid == "aliyun":
-            continue  # 百炼已在上一步处理（token-plan）；通用百炼 key 也可手动加
         val = config.provider_env_value(pid)
         if not val:
             continue
-        if _exists(lambda k: k.get("provider") == pid and "env" in (k.get("note") or "")):
+        # 已有该平台 .env Key 时，仅同步最新模型清单（跟随 config），不重复导入
+        existing = None
+        for k in s.list_objs(NS):
+            if k.get("provider") == pid and "env" in (k.get("note") or ""):
+                existing = k
+                break
+        if existing:
+            if existing.get("models") != meta.get("default_models", []):
+                existing["models"] = meta.get("default_models", [])
+                existing["updated_at"] = _now()
+                s.set_obj(NS, existing["id"], existing)
             continue
         kind = "general" if meta["kind"] == "general" else "dashscope"
+        name = "百炼通用 Key（全部服务）" if pid == "aliyun" else f"{meta['name']} 默认 Key"
         item = KeyItem(
             id=_new_id(),
             provider=pid,
-            name=f"{meta['name']} 默认 Key",
+            name=name,
             kind=kind,
             api_key=val,
             base_url=meta.get("base_url"),

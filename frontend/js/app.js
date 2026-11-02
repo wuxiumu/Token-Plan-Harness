@@ -27,4 +27,8 @@ function switchView(name) {
     v.classList.toggle("active", v.id === `view-${name}`));
   const view = App.Views[name];
   if (view) view.init();
+  // 上报访问记录（异步，不阻塞 UI）
+  try {
+    API.post("/api/access", { view: name, url: location.href }).catch(() => {});
+  } catch (_) {}
 }

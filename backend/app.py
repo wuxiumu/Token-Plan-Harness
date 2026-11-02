@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import config
-from .services import key_service, stats_service, trial_service
+from .services import access_service, key_service, stats_service, trial_service
 from .storage import get_storage, storage_mode
 
 app = FastAPI(title="AI-Key 管理工作台", version="0.1.0")
@@ -60,6 +60,11 @@ class ChatBody(BaseModel):
     model: str
     messages: list[dict]
     max_tokens: Optional[int] = None
+
+
+class AccessBody(BaseModel):
+    view: str = ""
+    url: str = ""
 
 
 # ---------- Key 管理 ----------
@@ -128,6 +133,17 @@ def api_trial_chat(body: ChatBody):
 @app.get("/api/trial/records", tags=["trial"])
 def api_trial_records(limit: int = 100):
     return {"items": trial_service.list_trials(limit)}
+
+
+# ---------- 访问记录 ----------
+@app.post("/api/access", tags=["access"])
+def api_access_record(body: AccessBody):
+    return access_service.record(view=body.view, url=body.url)
+
+
+@app.get("/api/access/records", tags=["access"])
+def api_access_records(limit: int = 50):
+    return {"items": access_service.list_records(limit), "total": access_service.count()}
 
 
 # ---------- 系统 ----------
