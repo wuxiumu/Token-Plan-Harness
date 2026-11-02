@@ -24,9 +24,21 @@ App.Views.trial = {
   async init() {
     const el = document.getElementById("view-trial");
     el.innerHTML = `<div id="t-root"></div>`;
-    await this.loadMeta();
-    this.renderPreview();
+    if (!this._providers.length) await this.loadMeta();
+    this.renderByHash();
     this.loadHistory();
+  },
+
+  // 同视图内 hash 变化（#/trial/{pid}）时由 app.js 调用，不重拉数据
+  onHash(pid) {
+    this.renderByHash();
+  },
+
+  renderByHash() {
+    const hp = location.hash.replace(/^#\/?/, "").split("/").filter(Boolean);
+    const pid = hp[0] === "trial" ? hp[1] : null;
+    if (pid && this._providers.some((p) => p.id === pid)) this.renderProviderView(pid);
+    else this.renderPreview();
   },
 
   /* ---------- 视图一：平台预览 ---------- */
@@ -80,6 +92,12 @@ App.Views.trial = {
 
   /* ---------- 视图二：平台内试画 ---------- */
   enterProvider(pid) {
+    const target = `#/trial/${pid}`;
+    if (location.hash !== target) location.hash = target;
+    this.renderProviderView(pid);
+  },
+
+  renderProviderView(pid) {
     this._active = pid;
     const p = this._providers.find((x) => x.id === pid);
     if (!p) return;
@@ -105,7 +123,12 @@ App.Views.trial = {
         </div>
         <div id="t-result" style="margin-top:12px"></div>
       </div>`;
-    document.getElementById("t-back").onclick = () => { this._active = null; this.renderPreview(); };
+    document.getElementById("t-back").onclick = () => {
+      this._active = null;
+      const target = `#/trial`;
+      if (location.hash !== target) location.hash = target;
+      this.renderPreview();
+    };
     document.getElementById("t-send").onclick = () => this.send();
     this.fillKeyModel(p);
     this.renderDemos(p);

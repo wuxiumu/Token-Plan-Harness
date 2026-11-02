@@ -1,8 +1,55 @@
-/* 应用入口：导航切换 + 视图初始化 */
+/* 应用入口：hash 路由 + 导航切换 + 视图初始化
+ * 视图地址：#/stats  #/keys  #/trial；统计页内部 tab：#/stats/{tabId}
+ * 刷新后从 hash 恢复当前视图与 tab；访问记录随视图切换上报（URL 带 hash）。 */
 window.App = { Views: {} };
 
+const VIEW_NAMES = ["stats", "keys", "trial"];
+let currentView = null;
+
+function parseHash() {
+  const h = location.hash.replace(/^#\/?/, "");
+  const parts = h.split("/").filter(Boolean);
+  let view = parts[0] || "stats";
+  if (!VIEW_NAMES.includes(view)) view = "stats";
+  const tab = parts.length > 1 ? parts[1] : null;
+  return { view, tab };
+}
+
+function renderView(name, tab) {
+  const prev = currentView;
+  currentView = name;
+  document.querySelectorAll(".nav-btn").forEach((b) =>
+    b.classList.toggle("active", b.dataset.view === name));
+  document.querySelectorAll(".view").forEach((v) =>
+    v.classList.toggle("active", v.id === `view-${name}`));
+  const view = App.Views[name];
+  if (view) {
+    // 同一视图内仅参数(tab)变化：交给视图自己的 onHash，不重复拉数据/上报
+    if (name === prev && tab && typeof view.onHash === "function") {
+      view.onHash(tab);
+      return;
+    }
+    if (tab && typeof view.setActiveTab === "function") view.setActiveTab(tab);
+    view.init();
+    // 上报访问记录（异步，不阻塞 UI）
+    try {
+      API.post("/api/access", { view: name, url: location.href }).catch(() => {});
+    } catch (_) {}
+  }
+}
+
+function switchView(name, tab) {
+  const target = tab ? `#/${name}/${tab}` : `#/${name}`;
+  if (location.hash !== target) location.hash = target;
+  renderView(name, tab);
+}
+
+window.addEventListener("hashchange", () => {
+  const { view, tab } = parseHash();
+  renderView(view, tab);
+});
+
 document.addEventListener("DOMContentLoaded", async () => {
-  // 导航
   document.querySelectorAll(".nav-btn").forEach((btn) => {
     btn.onclick = () => switchView(btn.dataset.view);
   });
@@ -16,19 +63,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     document.getElementById("sys-info").textContent = "后端未连接";
   }
 
-  // 默认视图
-  App.Views.stats.init();
+  // 按 hash 恢复视图
+  const { view, tab } = parseHash();
+  renderView(view, tab);
 });
-
-function switchView(name) {
-  document.querySelectorAll(".nav-btn").forEach((b) =>
-    b.classList.toggle("active", b.dataset.view === name));
-  document.querySelectorAll(".view").forEach((v) =>
-    v.classList.toggle("active", v.id === `view-${name}`));
-  const view = App.Views[name];
-  if (view) view.init();
-  // 上报访问记录（异步，不阻塞 UI）
-  try {
-    API.post("/api/access", { view: name, url: location.href }).catch(() => {});
-  } catch (_) {}
-}

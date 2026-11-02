@@ -11,7 +11,20 @@ App.Views.stats = {
   _data: null,
   _active: "overview",
 
+  // 供 app.js 在 init 前恢复上次 tab（hash 路由）
+  setActiveTab(tab) {
+    if (tab && this.TABS.some((t) => t.id === tab)) this._active = tab;
+  },
+
+  // 同视图内 hash 变化（#/stats/{tab}）时由 app.js 调用，只切 tab 不重拉数据
+  onHash(tab) {
+    this.switchTab(tab);
+  },
+
   async init() {
+    // 从 hash（#/stats/{tab}）恢复上次 tab
+    const hp = location.hash.replace(/^#\/?/, "").split("/").filter(Boolean);
+    if (hp[0] === "stats" && hp[1] && this.TABS.some((t) => t.id === hp[1])) this._active = hp[1];
     const el = document.getElementById("view-stats");
     el.innerHTML = `
       <div class="row" style="margin-bottom:14px">
@@ -48,6 +61,9 @@ App.Views.stats = {
 
   switchTab(id) {
     this._active = id;
+    // 同步 hash（#/stats/{id}），支持刷新恢复与分享
+    const target = `#/stats/${id}`;
+    if (location.hash !== target) location.hash = target;
     document.querySelectorAll("#stats-tabs .tab-btn").forEach((b) =>
       b.classList.toggle("active", b.dataset.tab === id));
     const body = document.getElementById("stats-body");
