@@ -65,6 +65,13 @@ App.Views.service = {
         <p class="muted">${fmt.esc(s.desc)} · ${fmt.esc(s.price)} · ${fmt.esc(s.quota)}</p>
         <div id="s-form"></div>
         <div id="s-result" style="margin-top:12px"></div>
+        <div id="s-logs" style="margin-top:18px">
+          <div class="log-head">
+            <h3 style="margin:0">调用日志</h3>
+            <button class="btn ghost sm" id="s-logs-refresh">刷新</button>
+          </div>
+          <div id="s-logs-inner"></div>
+        </div>
       </div>`;
     document.getElementById("s-back").onclick = () => {
       const target = `#/service`;
@@ -72,6 +79,7 @@ App.Views.service = {
       this.renderList();
     };
     this.renderForm(s);
+    this.renderLogs(s.id);
   },
 
   renderForm(s) {
@@ -157,6 +165,56 @@ App.Views.service = {
     } catch (e) {
       result.innerHTML = `<div class="msg err">${fmt.esc(e.message)}</div>`;
     }
+    this.renderLogs(id);
+  },
+
+  async renderLogs(id) {
+    const inner = document.getElementById("s-logs-inner");
+    const refresh = document.getElementById("s-logs-refresh");
+    if (!inner) return;
+    if (refresh) refresh.onclick = () => this.renderLogs(id);
+    inner.innerHTML = `<div class="loading">加载日志…</div>`;
+    let items = [];
+    try { const d = await API.get(`/api/mcp/logs?service_id=${id}`); items = d.items || []; } catch (e) { items = []; }
+    this._lastLogs = items;
+    if (!items.length) { inner.innerHTML = `<div class="muted">暂无调用记录，先执行一次测试</div>`; return; }
+    inner.innerHTML = items.map((r) => this.logRow(r)).join("");
+    inner.querySelectorAll("[data-log]").forEach((b) =>
+      b.onclick = () => this.showLogDetail(b.dataset.log));
+  },
+
+  logRow(r) {
+    const t = new Date(r.created_at).toLocaleTimeString();
+    const inSum = (r.params && JSON.stringify(r.params)) || "";
+    return `<div class="log-row ${r.ok ? "" : "err"}" data-log="${r.id}">
+      <span class="log-status ${r.ok ? "ok" : "err"}">${r.ok ? "成功" : "失败"}</span>
+      <span class="log-time">${t}</span>
+      <span class="log-ms">${r.elapsed_ms}ms</span>
+      <span class="log-in muted">${fmt.esc(inSum.slice(0, 70))}${inSum.length > 70 ? "…" : ""}</span>
+    </div>`;
+  },
+
+  showLogDetail(id) {
+    const r = (this._lastLogs || []).find((x) => x.id === id);
+    if (!r) return;
+    const ov = document.createElement("div");
+    ov.className = "modal-overlay";
+    ov.innerHTML = `<div class="modal">
+      <div class="modal-head">
+        <b>${fmt.esc(r.name)} · 调用日志详情</b>
+        <span class="modal-close">×</span>
+      </div>
+      <div class="modal-meta">${new Date(r.created_at).toLocaleString()} · 耗时 ${r.elapsed_ms}ms · ${r.ok ? "成功" : "失败"}</div>
+      <div class="modal-body">
+        <h4>输入参数</h4>
+        <pre>${fmt.esc(JSON.stringify(r.params || {}, null, 2))}</pre>
+        <h4>输出</h4>
+        <pre>${fmt.esc(JSON.stringify(r.output || {}, null, 2))}</pre>
+      </div>
+    </div>`;
+    document.body.appendChild(ov);
+    ov.querySelector(".modal-close").onclick = () => ov.remove();
+    ov.addEventListener("click", (e) => { if (e.target === ov) ov.remove(); });
   },
 
   renderResult(id, data) {

@@ -131,3 +131,26 @@ textarea { min-height: 80px; resize: vertical; font-family: inherit; }
 .t-card p { margin: 0; font-size: 13px; line-height: 1.5; }
 .t-card .btn { margin-top: auto; align-self: flex-start; }
 .t-card .btn[disabled] { opacity: .5; cursor: not-allowed; }
+
+/* --- 服务测试中心 · 调用日志 --- */
+.log-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.log-row { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border: 1px solid var(--border); border-radius: 6px; margin-bottom: 6px; cursor: pointer; background: var(--panel2); }
+.log-row:hover { filter: brightness(1.08); }
+.log-row.err { border-color: #3a1e1e; }
+.log-status { font-size: 12px; padding: 1px 7px; border-radius: 4px; white-space: nowrap; }
+.log-status.ok { background: #14231a; color: #7be3a2; }
+.log-status.err { background: #231414; color: #f0a3a3; }
+.log-time { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.log-ms { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.log-in { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* --- 日志详情弹窗 --- */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, .55); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+.modal { background: var(--bg, #171a21); border: 1px solid var(--border); border-radius: 12px; width: min(92vw, 720px); max-height: 84vh; display: flex; flex-direction: column; box-shadow: 0 12px 40px rgba(0, 0, 0, .5); }
+.modal-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+.modal-close { cursor: pointer; font-size: 20px; color: var(--muted); padding: 0 6px; }
+.modal-close:hover { color: #fff; }
+.modal-meta { padding: 8px 16px; font-size: 12px; color: var(--muted); border-bottom: 1px dashed var(--border); }
+.modal-body { padding: 12px 16px; overflow: auto; }
+.modal-body h4 { margin: 8px 0 4px; font-size: 13px; color: var(--muted); }
+.modal-body pre { background: #0f1218; border: 1px solid var(--border); border-radius: 6px; padding: 10px; font-size: 12px; white-space: pre-wrap; word-break: break-all; max-height: 40vh; overflow: auto; }

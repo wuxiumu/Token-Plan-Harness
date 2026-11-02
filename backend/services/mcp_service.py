@@ -3,7 +3,10 @@
 服务注册表 + 各服务调用封装（通过 bailian CLI `bl` 驱动）。
 supported=False 的服务在列表页展示为「接入中」，点击提示暂不可测。
 """
+import time
+
 from ..adapters.bailian_cli import _run
+from . import mcp_log_service
 
 # 服务注册表（描述/价格/权益额度取自百炼控制台）
 SERVICES = [
@@ -191,7 +194,16 @@ def call(service_id: str, params: dict):
     fn = _CALLERS.get(service_id)
     if not fn:
         return {"error": "该服务尚未接入调用"}
+    t0 = time.time()
     try:
-        return fn(params or {})
+        res = fn(params or {})
+        ok = not (isinstance(res, dict) and res.get("error"))
     except Exception as e:  # noqa: BLE001
-        return {"error": str(e)}
+        res = {"error": str(e)}
+        ok = False
+    elapsed = (time.time() - t0) * 1000
+    try:
+        mcp_log_service.add_log(meta["id"], meta["name"], params or {}, res, elapsed, ok)
+    except Exception:  # noqa: BLE001  日志失败不影响主流程
+        pass
+    return res
