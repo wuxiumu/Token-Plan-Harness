@@ -33,8 +33,8 @@ App.Views.keys = {
       try { const { providers } = await API.get("/api/providers"); this._providers = providers; } catch (e) {}
     }
     document.getElementById("btn-new-key").onclick = () => this.showForm(null);
-    document.getElementById("btn-refresh-keys").onclick = () => this.load();
-    this.load();
+    document.getElementById("btn-refresh-keys").onclick = () => this.load(true);
+    this.load();  // 默认读缓存
   },
 
   providerName(pid) {
@@ -46,11 +46,11 @@ App.Views.keys = {
     return p ? p.base_url : "";
   },
 
-  async load() {
+  async load(force = false) {
     const tb = document.getElementById("key-tbody");
-    tb.innerHTML = `<tr><td colspan="9" class="loading">加载中…</td></tr>`;
+    tb.innerHTML = `<tr><td colspan="9" class="loading">${force ? "刷新中…" : "加载中…"}</td></tr>`;
     try {
-      const { items } = await API.get("/api/keys");
+      const { items } = await API.get("/api/keys" + (force ? "?force=true" : ""));
       document.getElementById("key-count").textContent = `共 ${items.length} 条`;
       if (!items.length) {
         tb.innerHTML = `<tr><td colspan="9" class="muted">暂无 Key，点「+ 新增 Key」或重启后端自动导入各平台默认 Key</td></tr>`;
@@ -84,7 +84,7 @@ App.Views.keys = {
     if (!confirm("确认删除该 Key？")) return;
     try {
       await API.del(`/api/keys/${id}`);
-      this.load();
+      this.load(true);
     } catch (e) { alert(e.message); }
   },
 
@@ -149,7 +149,7 @@ App.Views.keys = {
         if (id) await API.put(`/api/keys/${id}`, body);
         else await API.post("/api/keys", body);
         wrap.style.display = "none";
-        this.load();
+        this.load(true);
       } catch (e) { alert(e.message); }
     };
     document.getElementById("f-cancel").onclick = () => { wrap.style.display = "none"; };

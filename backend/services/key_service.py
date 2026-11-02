@@ -1,6 +1,7 @@
 """Key 管理服务：增删改查 + 从百炼配置/ .env 自动导入各 Provider 的默认 key"""
 import json
 import os
+import time
 import uuid
 from datetime import datetime
 from typing import Optional
@@ -10,6 +11,8 @@ from ..models import KeyItem
 from ..storage import get_storage
 
 NS = "key"
+_LIST_CACHE_KEY = "__key_list"
+_LIST_CACHE_TTL = 30  # 秒：Key 列表默认读缓存，手动刷新/写操作后强制更新
 
 
 def _now() -> str:
@@ -119,10 +122,16 @@ def bootstrap_default_key() -> None:
             created_at=_now(), updated_at=_now(),
         )
         s.set_obj(NS, item.id, item.model_dump())
+    _invalidate_list_cache(s)
 
 
-def list_keys(show_secret: bool = False) -> list[dict]:
+def list_keys(show_secret: bool = False, force: bool = False) -> list[dict]:
     s = get_storage()
+    # 默认读缓存（30s），手动刷新(force) 或写操作后失效
+    if not show_secret and not force:
+        snap = s.get_snapshot(NS, _LIST_CACHE_KEY)
+        if snap and time.time() - snap.get("_t", 0) < _LIST_CACHE_TTL:
+            return snap["data"]
     keys = s.list_objs(NS)
     keys.sort(key=lambda k: k.get("created_at", ""), reverse=True)
     out = []
@@ -133,7 +142,14 @@ def list_keys(show_secret: bool = False) -> list[dict]:
             k = dict(k)
             k["api_key"] = KeyItem.model_validate(k).masked()["api_key"]
             out.append(k)
+    if not show_secret:
+        s.set_snapshot(NS, _LIST_CACHE_KEY, {"_t": time.time(), "data": out})
     return out
+
+
+def _invalidate_list_cache(s) -> None:
+    """写操作后失效 Key 列表缓存，保证下次读取为最新。"""
+    s.set_snapshot(NS, _LIST_CACHE_KEY, {"_t": 0, "data": []})
 
 
 def get_key(key_id: str) -> Optional[dict]:
@@ -170,6 +186,7 @@ def create_key(data: dict) -> dict:
         updated_at=now,
     )
     get_storage().set_obj(NS, item.id, item.model_dump())
+    _invalidate_list_cache(get_storage())
     return item.masked()
 
 
@@ -185,6 +202,7 @@ def update_key(key_id: str, patch: dict) -> Optional[dict]:
             setattr(item, f, patch[f])
     item.updated_at = _now()
     s.set_obj(NS, key_id, item.model_dump())
+    _invalidate_list_cache(s)
     return item.masked()
 
 
@@ -193,4 +211,5 @@ def delete_key(key_id: str) -> bool:
     if not s.get_obj(NS, key_id):
         return False
     s.delete_obj(NS, key_id)
+    _invalidate_list_cache(s)
     return True

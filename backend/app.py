@@ -84,8 +84,8 @@ def api_create_key(body: KeyCreate):
 
 
 @app.get("/api/keys", tags=["keys"])
-def api_list_keys():
-    return {"items": key_service.list_keys()}
+def api_list_keys(force: bool = False):
+    return {"items": key_service.list_keys(force=force)}
 
 
 @app.put("/api/keys/{key_id}", tags=["keys"])

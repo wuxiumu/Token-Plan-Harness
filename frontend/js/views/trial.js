@@ -24,7 +24,7 @@ App.Views.trial = {
   async init() {
     const el = document.getElementById("view-trial");
     el.innerHTML = `<div id="t-root"></div>`;
-    if (!this._providers.length) await this.loadMeta();
+    await this.loadMeta();  // 读缓存（后端 /api/keys 30s 缓存），手动刷新走 force
     this.renderByHash();
     this.loadHistory();
   },
@@ -47,7 +47,11 @@ App.Views.trial = {
     const sorted = [...this._providers].sort((a, b) => (b.score || 0) - (a.score || 0));
     root.innerHTML = `
       <div class="panel">
-        <h3>选择平台 · 多模型试画</h3>
+        <div class="row" style="align-items:center;gap:10px;margin-bottom:4px">
+          <h3 style="margin:0">选择平台 · 多模型试画</h3>
+          <div class="spacer"></div>
+          <button class="btn ghost" id="t-refresh">刷新数据</button>
+        </div>
         <p class="muted" style="margin-bottom:12px">
           先看各平台优势与推荐分，点击进入后选择该平台的 Key 与模型
           （平台与模型严格绑定，不跨平台混用）。无 Key 的平台请在 Key 管理或 .env 补充。
@@ -65,6 +69,13 @@ App.Views.trial = {
     wrap.innerHTML = sorted.map((p) => this.card(p)).join("");
     wrap.querySelectorAll("[data-enter]").forEach((b) =>
       b.onclick = () => this.enterProvider(b.dataset.enter));
+    document.getElementById("t-refresh").onclick = async () => {
+      const btn = document.getElementById("t-refresh");
+      btn.textContent = "刷新中…";
+      await this.loadMeta(true);
+      this.renderPreview();
+      this.loadHistory();
+    };
   },
 
   card(p) {
@@ -172,10 +183,10 @@ App.Views.trial = {
       });
   },
 
-  async loadMeta() {
+  async loadMeta(force = false) {
     try {
       const [prov, keysRes] = await Promise.all([
-        API.get("/api/providers"), API.get("/api/keys"),
+        API.get("/api/providers"), API.get("/api/keys" + (force ? "?force=true" : "")),
       ]);
       this._providers = prov.providers;
       this._keys = keysRes.items;
