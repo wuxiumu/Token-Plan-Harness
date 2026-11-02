@@ -118,12 +118,15 @@ App.Views.service = {
         <label>知识库检索 / 问答</label>
         <textarea id="p-query" placeholder="向你的私有知识库提问"></textarea>
         <div class="row">
-          <div style="flex:1"><label>知识库 ID（可选）</label><input id="p-kb" placeholder="kb-..."></div>
+          <div style="flex:1"><label>问答服务 ID（agent-id，必填）</label><input id="p-kb" placeholder="控制台「知识库问答」页获取"></div>
         </div>
         <div class="row" style="margin-top:12px"><button class="btn" id="s-run">知识库问答</button></div>`;
       case "memory": return `
         <label>记忆检索关键词</label>
         <input id="p-query" placeholder="例如：用户的偏好"></input>
+        <div class="row">
+          <div style="flex:1"><label>用户 ID（必填）</label><input id="p-user" placeholder="例如：user1"></div>
+        </div>
         <div class="row" style="margin-top:12px"><button class="btn" id="s-run">检索记忆</button></div>`;
       default: return null;
     }
@@ -141,6 +144,7 @@ App.Views.service = {
     if (document.getElementById("p-duration")) p.duration = parseInt(v("p-duration"), 10) || 5;
     if (document.getElementById("p-count")) p.count = parseInt(v("p-count"), 10) || 5;
     if (document.getElementById("p-kb")) p.knowledge_base_id = v("p-kb");
+    if (document.getElementById("p-user")) p.user_id = v("p-user");
     return p;
   },
 
@@ -172,6 +176,9 @@ App.Views.service = {
         return `<video src="${urls[0]}" controls style="max-width:100%;border-radius:8px"></video>`;
       }
       case "web_search": {
+        if (data && data.content) {
+          return `<h3>联网搜索回答</h3><div class="panel2"><pre style="white-space:pre-wrap">${fmt.esc(data.content)}</pre></div>`;
+        }
         const items = (data && (data.results || data.items || [])) || [];
         if (!items.length) return `<div class="msg err">无结果。${fmt.esc(JSON.stringify(data || "").slice(0, 300))}</div>`;
         return `<h3>${items.length} 条结果</h3><ol>${items.map((r) =>

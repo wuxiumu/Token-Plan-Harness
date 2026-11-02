@@ -133,23 +133,43 @@ def call_video(params):
 
 
 def call_search(params):
-    args = ["search", "web", "--query", _ensure(params, "query")]
-    c = params.get("count")
-    if c:
-        args += ["--count", str(c)]
-    return _bl(*args)
+    # 当前活跃 profile 是 token-plan，其 key 不授权 `bl search web`(MCP 通道)，
+    # 官方正确路径：model-native 联网搜索（Responses API + web_search 工具），已实测可用。
+    args = [
+        "text", "chat", "--api", "responses",
+        "--tool", '{"type":"web_search"}',
+        "--message", _ensure(params, "query"),
+    ]
+    data = _bl(*args)
+    # 从 Responses 结构提取可读文本
+    if isinstance(data, dict) and isinstance(data.get("output"), list):
+        texts = []
+        for o in data["output"]:
+            content = o.get("content") or []
+            if isinstance(content, list):
+                for c in content:
+                    if isinstance(c, dict) and c.get("type") == "output_text" and c.get("text"):
+                        texts.append(c["text"])
+        if texts:
+            data["content"] = "\n\n".join(texts)
+    return data
 
 
 def call_knowledge(params):
-    args = ["knowledge", "chat", "--query", _ensure(params, "query")]
+    # 官方用法：bl knowledge chat --message <text> --agent-id <id>（--agent-id 必填）
+    args = ["knowledge", "chat", "--message", _ensure(params, "query")]
     kb = params.get("knowledge_base_id")
     if kb:
-        args += ["--knowledge-base-id", kb]
+        args += ["--agent-id", kb]
     return _bl(*args)
 
 
 def call_memory(params):
-    args = ["memory", "search", "--query", _ensure(params, "query")]
+    # 官方用法：bl memory search --user-id <id> --query <text>（--user-id 必填；workspace 取自 BAILIAN_WORKSPACE_ID）
+    args = ["memory", "search", "--user-id", params.get("user_id") or "default_user"]
+    q = _ensure(params, "query")
+    if q:
+        args += ["--query", q]
     return _bl(*args)
 
 
