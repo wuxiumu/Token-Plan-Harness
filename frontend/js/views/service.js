@@ -27,6 +27,7 @@ App.Views.service = {
       <div class="panel">
         <h3>Harness · MCP 服务测试中心</h3>
         <p class="muted">阿里云百炼 Harness 各能力服务，点击卡片进入独立测试页，可独立操作与刷新。</p>
+        <div id="s-quota" style="margin-bottom:16px"></div>
         <div id="s-global-stats" style="margin-bottom:14px"></div>
         <div id="s-cards" class="card-grid"></div>
       </div>`;
@@ -34,7 +35,39 @@ App.Views.service = {
     wrap.innerHTML = this._items.map((s) => this.card(s)).join("");
     wrap.querySelectorAll("[data-enter]").forEach((b) =>
       b.onclick = () => this.enterService(b.dataset.enter));
+    this.renderQuota();
     this.renderGlobalStats();
+  },
+
+  async renderQuota(force) {
+    const el = document.getElementById("s-quota");
+    if (!el) return;
+    if (force) { el.innerHTML = `<div class="muted">刷新中…</div>`; }
+    let q = null;
+    try { q = await API.get("/api/harness/quota?force=" + (force ? "true" : "false")); } catch (e) { q = null; }
+    if (!q || !q.items || !q.items.length) { el.innerHTML = `<div class="muted">暂无 Harness 免费权益数据</div>`; return; }
+    const pd = q.period || {};
+    const rows = q.items.map((it) => {
+      const pct = it.total ? Math.round((it.used / it.total) * 100) : 0;
+      return `<div class="quota-row">
+        <span class="quota-name">${fmt.esc(it.title)}</span>
+        <span class="quota-bar"><i style="width:${pct}%"></i></span>
+        <b class="quota-num">${it.used}/${it.total} ${fmt.esc(it.unit || "")}</b>
+        <span class="quota-status ${it.used > 0 ? "" : "unused"}">${it.used > 0 ? `已用 ${pct}%` : "未使用"}</span>
+      </div>`;
+    }).join("");
+    const periodTxt = pd.start ? `周期 ${new Date(pd.start).toLocaleDateString()} ~ ${new Date(pd.end).toLocaleDateString()}` : "";
+    el.innerHTML = `<div class="quota-head">
+        <h3 style="margin:0">Token Plan · Harness 免费权益</h3>
+        <button class="btn ghost sm" id="s-quota-refresh">刷新</button>
+      </div>
+      <div class="muted" style="margin:4px 0 8px;font-size:12px">
+        免费权益需通过 <b>MCP 通道</b> 调用对应服务才消耗；当前图像/联网搜索等走 DashScope 模型 API（按量计费），不计入权益。
+        ${periodTxt}
+      </div>
+      <div class="quota-list">${rows}</div>`;
+    const btn = document.getElementById("s-quota-refresh");
+    if (btn) btn.onclick = () => this.renderQuota(true);
   },
 
   async renderGlobalStats() {

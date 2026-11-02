@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import config
-from .services import access_service, key_service, mcp_log_service, mcp_service, stats_service, trial_service
+from .services import access_service, harness_quota_service, key_service, mcp_log_service, mcp_service, stats_service, trial_service
 from .storage import get_storage, storage_mode
 
 app = FastAPI(title="AI-Key 管理工作台", version="0.1.0")
@@ -154,6 +154,11 @@ def api_mcp_logs(service_id: str = "", limit: int = 50):
 @app.get("/api/mcp/stats", tags=["mcp"])
 def api_mcp_stats(service_id: str = ""):
     return mcp_log_service.stats(service_id or None)
+
+
+@app.get("/api/harness/quota", tags=["harness"])
+def api_harness_quota(force: bool = False):
+    return harness_quota_service.get_quota(force)
 
 
 # ---------- 访问记录 ----------

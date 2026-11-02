@@ -156,6 +156,17 @@ textarea { min-height: 80px; resize: vertical; font-family: inherit; }
 .per-item b { color: var(--amber); }
 .per-item span { color: var(--muted); }
 
+/* --- Harness 免费权益 --- */
+.quota-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+.quota-list { display: flex; flex-direction: column; gap: 5px; }
+.quota-row { display: flex; align-items: center; gap: 10px; font-size: 12px; padding: 6px 10px; background: var(--panel2); border: 1px solid var(--border); border-radius: 6px; }
+.quota-name { width: 130px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.quota-bar { flex: 1; height: 8px; background: #232733; border-radius: 4px; overflow: hidden; }
+.quota-bar i { display: block; height: 100%; background: linear-gradient(90deg, #3b82f6, #22d3ee); border-radius: 4px; }
+.quota-num { width: 90px; text-align: right; color: var(--fg); }
+.quota-status { width: 64px; text-align: right; color: var(--green, #7be3a2); }
+.quota-status.unused { color: var(--amber, #f5c06b); }
+
 /* --- 日志详情弹窗 --- */
 .modal-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, .55); display: flex; align-items: center; justify-content: center; z-index: 1000; }
 .modal { background: var(--bg, #171a21); border: 1px solid var(--border); border-radius: 12px; width: min(92vw, 720px); max-height: 84vh; display: flex; flex-direction: column; box-shadow: 0 12px 40px rgba(0, 0, 0, .5); }
