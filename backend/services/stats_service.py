@@ -11,7 +11,7 @@ from ..storage import get_storage
 
 REC_NS = "usage_record"
 SNAP_NS = "stats"
-CACHE_TTL = 60  # 实时数据缓存秒数
+CACHE_TTL = 30 * 60  # 30 分钟缓存一次，默认读缓存为主；手动刷新才强制重新拉取
 
 
 def _sum_usage(records: list[dict]) -> dict:
@@ -84,12 +84,18 @@ def live_overview() -> dict:
 
 
 def build_overview(force: bool = False) -> dict:
-    """综合：本地累计 + 实时云端概览，带 60s 缓存；落盘快照"""
+    """综合：本地累计 + 实时云端概览。
+
+    缓存策略：默认读缓存为主。
+      - 缓存存在且未满 30 分钟 → 直接返回缓存（不触达百炼 CLI）
+      - 缓存存在但已超过 30 分钟 → 自动重新拉取一次
+      - force=True（手动刷新）→ 总是重新拉取
+    """
     s = get_storage()
     snap = s.get_snapshot(SNAP_NS, "overview")
     if snap and not force:
-        ts = snap.get("captured_at_unix")
-        if ts and (time.time() - ts) < CACHE_TTL:
+        age = time.time() - snap.get("captured_at_unix", 0)
+        if age < CACHE_TTL:
             return snap
     local = local_stats()
     live = live_overview()

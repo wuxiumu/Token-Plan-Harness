@@ -9,15 +9,15 @@ App.Views.stats = {
         <button class="btn" id="btn-refresh-stats">刷新（实时拉取百炼）</button>
       </div>
       <div id="stats-body" class="loading">加载中…</div>`;
-    document.getElementById("btn-refresh-stats").onclick = () => this.load();
+    document.getElementById("btn-refresh-stats").onclick = () => this.load(true);
     this.load();
   },
 
-  async load() {
+  async load(force = false) {
     const body = document.getElementById("stats-body");
-    body.innerHTML = `<div class="loading">正在拉取百炼用量/权益数据…</div>`;
+    body.innerHTML = `<div class="loading">${force ? "正在拉取百炼用量/权益数据…" : "加载统计概览…"}</div>`;
     try {
-      const data = await API.get("/api/stats/overview?force=true");
+      const data = await API.get("/api/stats/overview" + (force ? "?force=true" : ""));
       this.render(body, data);
     } catch (e) {
       body.innerHTML = `<div class="msg err">${fmt.esc(e.message)}</div>`;
