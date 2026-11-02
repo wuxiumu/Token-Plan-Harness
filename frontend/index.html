@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI-Key 管理工作台</title>
+  <link rel="stylesheet" href="static/css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">AI-Key 工作台</div>
+    <nav class="nav">
+      <button data-view="stats" class="nav-btn active">统计概览</button>
+      <button data-view="keys" class="nav-btn">Key 管理</button>
+      <button data-view="trial" class="nav-btn">多模型试画</button>
+    </nav>
+    <div class="sys" id="sys-info">…</div>
+  </header>
+
+  <main class="container">
+    <section id="view-stats" class="view active"></section>
+    <section id="view-keys" class="view"></section>
+    <section id="view-trial" class="view"></section>
+  </main>
+
+  <script src="static/js/vendor/echarts.min.js"></script>
+  <script src="static/js/api.js"></script>
+  <script src="static/js/app.js"></script>
+  <script src="static/js/views/keys.js"></script>
+  <script src="static/js/views/stats.js"></script>
+  <script src="static/js/views/trial.js"></script>
+</body>
+</html>
