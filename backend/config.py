@@ -50,29 +50,36 @@ DASHSCOPE_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 # ---------- 多 Provider 注册表 ----------
 # kind: quota  = 有配额/订阅可监控（百炼 token-plan/harness、智谱 code plan）
 #       general = 通用 OpenAI 兼容 Key（OpenAI/DeepSeek/Kimi），仅 Key 管理 + 试画 + 本地用量
+# desc: 平台优势介绍（试画页预览卡片用）；score: 推荐分 0~5（0.1 步进）
 PROVIDERS: dict[str, dict] = {
     "aliyun": {
         "name": "阿里云百炼",
         "kind": "quota",
         "base_url": DASHSCOPE_BASE_URL,
         "env_key": "BAILIAN_API_KEY",
+        "desc": "Token Plan / Harness 权益已配，qwen 全系模型，配额实时可监控，你的主力平台",
+        "score": 4.8,
         "default_models": [
             "qwen-plus", "qwen-turbo", "qwen-max", "qwen-long",
             "qwen-vl-plus", "qwen-vl-max", "deepseek-v3", "deepseek-r1",
         ],
     },
     "zhipu": {
-        "name": "智谱 GLM",
+        "name": "智谱 GLM (z.ai)",
         "kind": "quota",
         "base_url": "https://open.bigmodel.cn/api/paas/v4",
         "env_key": "ZHIPU_API_KEY",
-        "default_models": ["glm-4.5", "glm-4.6", "glm-4.5-air", "glm-4-plus"],
+        "desc": "旗舰 GLM-5.3 / 5.3-Flash，1M 上下文、原生多模态，Code Plan 用量已接入",
+        "score": 4.6,
+        "default_models": ["glm-5.3", "glm-5.3-flash"],
     },
     "openai": {
         "name": "OpenAI",
         "kind": "general",
         "base_url": "https://api.openai.com/v1",
         "env_key": "OPENAI_API_KEY",
+        "desc": "GPT 全球标杆，通用能力全面，生态最成熟",
+        "score": 4.5,
         "default_models": ["gpt-4o", "gpt-4o-mini", "gpt-4.1", "gpt-4.1-mini", "o3-mini"],
     },
     "deepseek": {
@@ -80,6 +87,8 @@ PROVIDERS: dict[str, dict] = {
         "kind": "general",
         "base_url": "https://api.deepseek.com/v1",
         "env_key": "DEEPSEEK_API_KEY",
+        "desc": "开源高性价比，Chat 通用 / Reasoner 深度推理",
+        "score": 4.3,
         "default_models": ["deepseek-chat", "deepseek-reasoner"],
     },
     "kimi": {
@@ -87,6 +96,8 @@ PROVIDERS: dict[str, dict] = {
         "kind": "general",
         "base_url": "https://api.moonshot.cn/v1",
         "env_key": "KIMI_API_KEY",
+        "desc": "超长上下文（128K），K2 模型推理能力强，中文友好",
+        "score": 4.2,
         "default_models": ["moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k", "kimi-k2"],
     },
 }

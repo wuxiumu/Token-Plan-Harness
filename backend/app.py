@@ -67,7 +67,8 @@ class ChatBody(BaseModel):
 def api_providers():
     return {"providers": [
         {"id": pid, "name": meta["name"], "kind": meta["kind"],
-         "base_url": meta["base_url"], "models": meta["default_models"]}
+         "base_url": meta["base_url"], "models": meta["default_models"],
+         "desc": meta.get("desc", ""), "score": meta.get("score", 0.0)}
         for pid, meta in config.PROVIDERS.items()
     ]}
 
