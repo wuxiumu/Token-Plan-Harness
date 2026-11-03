@@ -2,10 +2,9 @@
 App.Views.stats = {
   TABS: [
     { id: "overview", label: "概览" },
-    { id: "tokenplan", label: "Token Plan" },
+    { id: "tokenplan", label: "Plan 配额" },
     { id: "harness", label: "Harness 权益" },
     { id: "free", label: "免费额度" },
-    { id: "zhipu", label: "智谱 Code Plan" },
     { id: "local", label: "本地用量" },
   ],
   _data: null,
@@ -39,9 +38,9 @@ App.Views.stats = {
   // 每个 tab 有独立刷新：概览=全量(总统计)，tokenplan/harness/free=百炼实时，zhipu=仅智谱，local=重读本地
   forceQS(force, tab) {
     if (!force) return "";
-    const m = { tokenplan: "live", harness: "live", free: "live", zhipu: "zhipu", local: "local" };
+    const m = { tokenplan: "live,zhipu", harness: "live", free: "live", local: "local" };
     const mod = m[tab];
-    return mod ? `?force_tab=${mod}` : "?force=true";
+    return mod ? `?force_tabs=${mod}` : "?force=true";
   },
 
   async load(force = false, tab = this._active) {
@@ -85,10 +84,9 @@ App.Views.stats = {
     const content = document.getElementById("stats-tab-content");
     const map = {
       overview: () => this.tabOverview(content, data),
-      tokenplan: () => this.tabTokenPlan(content, data),
+      tokenplan: () => this.tabPlanQuota(content, data),
       harness: () => this.tabHarness(content, data),
       free: () => this.tabFree(content, data),
-      zhipu: () => this.tabZhipu(content, data),
       local: () => this.tabLocal(content, data),
     };
     (map[id] || map.overview)();
@@ -162,15 +160,18 @@ App.Views.stats = {
     }
   },
 
-  /* ---- Tab: Token Plan ---- */
-  tabTokenPlan(body, data) {
+  /* ---- Tab: Plan 配额（阿里云 Token Plan + 智谱 GLM Code Plan 合并） ---- */
+  tabPlanQuota(body, data) {
     const live = data.live || {};
     const tp = live.token_plan || {};
     const sum = live.usage_summary || {};
     const pct = tp.per1MonthPercentage ?? 0;
+    const zc = data.zhipu_code_plan || {};
+    const prov = data.providers || {};
+    const zp = prov.zhipu || {};
     body.innerHTML = `
       <div class="panel">
-        <h3>Token Plan 配额</h3>
+        <h3>阿里云 Token Plan 配额</h3>
         <div class="two-col">
           <div><div id="chart-tokenplan" class="chart" style="height:260px"></div></div>
           <div>
@@ -186,8 +187,33 @@ App.Views.stats = {
             </table>
           </div>
         </div>
+      </div>
+
+      <div class="panel">
+        <h3>智谱 GLM Code Plan 配额</h3>
+        <p style="margin-bottom:8px">状态：${this.zhipuBadge(zc.status || "not_configured")} · ${fmt.num(zp.key_count || 0)} 个智谱 Key${zp.env_configured ? " · 已配置 .env" : ""}</p>
+        ${this.zhipuQuotaTable(zc)}
       </div>`;
     this.drawTokenPlan(pct, tp);
+  },
+
+  zhipuQuotaTable(zc) {
+    const periods = Array.isArray(zc.periods) ? zc.periods : [];
+    if (zc.status === "ok" && periods.length) {
+      return `<table>
+        <thead><tr><th>周期</th><th>总额度</th><th>已用</th><th>剩余</th><th>使用%</th><th>下次重置</th></tr></thead>
+        <tbody>${periods.map((p) => `
+          <tr>
+            <td>${fmt.esc(p.unit)}</td>
+            <td>${fmt.num(p.total)}</td>
+            <td>${fmt.num(p.used)}</td>
+            <td>${fmt.num(p.remaining)}</td>
+            <td>${this.percentBar(p.percentage)}</td>
+            <td>${fmt.maskTime(p.next_reset_ms)}</td>
+          </tr>`).join("")}</tbody></table>`;
+    }
+    if (zc.status === "error") return `<div class="msg err">${fmt.esc(zc.note)}</div>`;
+    return `<div class="muted" style="margin-top:10px">${fmt.esc(zc.note || "")}</div>`;
   },
 
   /* ---- Tab: Harness ---- */
@@ -224,41 +250,6 @@ App.Views.stats = {
       <div class="panel">
         <h3>免费额度（按到期排序）</h3>
         ${this.freeTable(free)}
-      </div>`;
-  },
-
-  /* ---- Tab: 智谱 Code Plan ---- */
-  tabZhipu(body, data) {
-    const zc = data.zhipu_code_plan || {};
-    const prov = data.providers || {};
-    const zp = prov.zhipu || {};
-    const periods = Array.isArray(zc.periods) ? zc.periods : [];
-    let table;
-    if (zc.status === "ok" && periods.length) {
-      table = `<table>
-        <thead><tr><th>周期</th><th>总额度</th><th>已用</th><th>剩余</th><th>使用%</th><th>下次重置</th></tr></thead>
-        <tbody>${periods.map((p) => `
-          <tr>
-            <td>${fmt.esc(p.unit)}</td>
-            <td>${fmt.num(p.total)}</td>
-            <td>${fmt.num(p.used)}</td>
-            <td>${fmt.num(p.remaining)}</td>
-            <td>${this.percentBar(p.percentage)}</td>
-            <td>${fmt.maskTime(p.next_reset_ms)}</td>
-          </tr>`).join("")}</tbody></table>`;
-    } else if (zc.status === "error") {
-      table = `<div class="msg err">${fmt.esc(zc.note)}</div>`;
-    } else {
-      table = `<div class="muted" style="margin-top:10px">${fmt.esc(zc.note)}</div>`;
-    }
-    body.innerHTML = `
-      <div class="panel">
-        <h3>智谱 GLM Code Plan（bigmodel.cn）${zc.level ? ` <span class="tag">${fmt.esc(zc.level)} 套餐</span>` : ""}</h3>
-        <p style="margin-bottom:8px">状态：${this.zhipuBadge(zc.status)} · ${fmt.num(zp.key_count || 0)} 个智谱 Key${zp.env_configured ? " · 已配置 .env" : ""}</p>
-        ${table}
-        <div class="muted" style="margin-top:12px;font-size:12px">
-          套餐积分额度：Lite 每5小时 2000 / 每周 10000 · Pro 每5小时 12000 / 每周 60000 · Max 每5小时 28000 / 每周 140000。
-        </div>
       </div>`;
   },
 
