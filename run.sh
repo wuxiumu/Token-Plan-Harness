@@ -1,19 +1,30 @@
 #!/usr/bin/env bash
 # AI-Key 管理工作台启动脚本
+# 用法：./run.sh start|stop|pause|restart|status|log [-f]
+# 端口：默认 8000；在 .env 配置 TPH_PORT=xxxx 修改（临时覆盖：TPH_PORT=xxxx ./run.sh restart）
+#       多项目端口冲突时脚本会提示占用进程，改 .env 后 restart 即可
 set -e
 cd "$(dirname "$0")"
 
-# 创建虚拟环境（如不存在）
-if [ ! -d .venv ]; then
-  echo "[run] 创建虚拟环境 .venv ..."
-  PY=$(command -v python3 || echo /usr/bin/python3)
-  # 优先使用较新的 Python
-  for cand in /Users/mac/.local/bin/python3 /usr/bin/python3; do
-    if [ -x "$cand" ]; then PY="$cand"; break; fi
-  done
-  "$PY" -m venv .venv
-  ./.venv/bin/pip install --upgrade pip -q
-  ./.venv/bin/pip install -r requirements.txt -q
-fi
+ACTION="${1:-start}"
 
-exec ./.venv/bin/python scripts/workbench.py "${@:-start}"
+PY=./.venv/bin/python
+case "$ACTION" in
+  start|restart)
+    # 启动服务必须有 venv
+    if [ ! -d .venv ]; then
+      echo "[run] 创建虚拟环境 .venv ..."
+      BASE=$(command -v python3 || echo /usr/bin/python3)
+      [ -x "$HOME/.local/bin/python3" ] && BASE="$HOME/.local/bin/python3"
+      "$BASE" -m venv .venv
+      ./.venv/bin/pip install --upgrade pip -q
+      ./.venv/bin/pip install -r requirements.txt -q
+    fi
+    ;;
+  *)
+    # stop/status/log 不依赖项目包，venv 不存在时用系统 python（workbench.py 仅标准库）
+    [ -x "$PY" ] || PY=$(command -v python3 || echo /usr/bin/python3)
+    ;;
+esac
+
+exec "$PY" scripts/workbench.py "$@"

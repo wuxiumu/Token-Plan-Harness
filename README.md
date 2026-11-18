@@ -123,12 +123,13 @@ python3 -m venv .venv
 
 ```bash
 ./run.sh start    # 后台启动（直接 ./run.sh 也可以）
-./run.sh pause    # 暂停网站服务，保留全部数据；stop 同义
+./run.sh stop     # 停止服务，保留全部数据；pause 同义
 ./run.sh restart  # 重启服务
-./run.sh status   # 查看运行状态
+./run.sh status   # 查看运行状态与端口来源
+./run.sh log      # 查看最近 50 行日志；./run.sh log -f 实时跟踪
 ```
 
-服务监听 `0.0.0.0:8000`，日志位于 `data/runtime/server.log`，PID 信息位于 `data/runtime/server.json`。启动脚本不会杀死占用端口的其他进程。修改端口可用 `TPH_PORT=8002 ./run.sh start`；重启默认沿用正在运行的服务端口。暂停期间分享链接暂不可访问，重新启动后恢复。
+服务默认监听 `0.0.0.0:8000`，日志位于 `data/runtime/server.log`，PID 信息位于 `data/runtime/server.json`。端口可在 `.env` 配置 `TPH_PORT`（不配置用默认 8000）。多项目同机部署端口冲突时，启动会被拒绝并提示占用进程，请在 `.env` 修改 `TPH_PORT` 后 `./run.sh restart`；启动脚本不会杀死占用端口的其他进程。`restart` 默认沿用正在运行的服务端口，`.env` 里显式配置了 `TPH_PORT` 则以配置为准。暂停期间分享链接暂不可访问，重新启动后恢复。
 
 在本机以 `http://127.0.0.1:8000` 打开工作台，点击顶部「分享」，复制局域网链接或扫码。二维码由本机生成。多个网卡时选择当前 Wi-Fi/有线网络地址；接收设备需在同一局域网，电脑需保持运行，并允许防火墙入站连接。路由器的访客网络/客户端隔离可能阻止访问，IP 变化后需重新分享。
 

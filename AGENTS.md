@@ -15,7 +15,7 @@ open http://127.0.0.1:8000
 ```
 
 - 依赖：Python 3.10+；`bl`（百炼 CLI，配额/用量模块必需）；可选 Codex / Kimi CLI（对应模块）；可选 Redis（无则自动降级文件存储 `data/store/`）。
-- 端口：默认 8000，`TPH_PORT=8002 ./run.sh start` 可改。
+- 端口：默认 8000；`.env` 配 `TPH_PORT` 修改，多项目冲突时启动会拒绝并提示占用进程（改 `.env` 后 `./run.sh restart`）。`./run.sh log [-f]` 看日志，`status` 看状态。
 - 测试：`.venv/bin/python -m unittest discover -s tests -v`（改动后端后必须跑）。
 
 ## 目录地图

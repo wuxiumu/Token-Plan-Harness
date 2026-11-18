@@ -14,6 +14,77 @@ RUNTIME = ROOT / 'data' / 'runtime'
 RUNTIME.mkdir(parents=True, exist_ok=True)
 STATE = RUNTIME / 'server.json'
 LOG = RUNTIME / 'server.log'
+DEFAULT_PORT = 8000
+
+
+def load_dotenv():
+    """把 .env 的键值补充进环境变量（真实环境变量优先，不覆盖）。"""
+    path = ROOT / '.env'
+    if not path.exists():
+        return
+    for line in path.read_text(encoding='utf-8', errors='replace').splitlines():
+        line = line.strip()
+        if not line or line.startswith('#') or '=' not in line:
+            continue
+        key, _, value = line.partition('=')
+        key, value = key.strip(), value.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
+def resolve_port():
+    raw = os.environ.get('TPH_PORT', '') or str(DEFAULT_PORT)
+    try:
+        port = int(raw)
+        if not 1 <= port <= 65535:
+            raise ValueError
+    except ValueError:
+        raise SystemExit(f'.env 中 TPH_PORT={raw} 不是有效端口（1-65535），请修改 .env 后重试。')
+    return port
+
+
+def _port_note():
+    raw = os.environ.get('TPH_PORT', '')
+    return f'{raw or DEFAULT_PORT}（来源：{"环境变量/.env" if raw else "默认"}）'
+
+
+def port_busy(port):
+    """真有无害的端口占用者:先连回环(只有活监听才接得住,排除 TIME_WAIT 误报,
+    也覆盖只监听 127.0.0.1 的进程),再试 bind 0.0.0.0(抓只绑通配的监听者)。"""
+    import socket
+    with socket.socket() as sock:
+        sock.settimeout(.3)
+        if sock.connect_ex(('127.0.0.1', port)) == 0:
+            return True
+    with socket.socket() as sock:
+        # 与 uvicorn 一致:允许 TIME_WAIT 复用,避免刚重启的旧连接被误判为占用
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            sock.bind(('0.0.0.0', port))
+        except OSError:
+            return True
+    return False
+
+
+def ensure_port_free(port):
+    if port_busy(port):
+        holder = port_holder(port)
+        raise SystemExit(
+            f'端口 {port} 已被占用{"（" + holder + "）" if holder else ""}，工作台未启动，也不会停止其他进程。\n'
+            f'多项目冲突处理：编辑 .env，修改或添加 TPH_PORT=<空闲端口>，再运行 ./run.sh restart；'
+            f'或临时用 TPH_PORT=<端口> ./run.sh restart。'
+        )
+
+
+def port_holder(port):
+    """尽量查出占用端口的进程描述，查不到返回 None。"""
+    try:
+        out = subprocess.run(['lsof', '-nP', f'-iTCP:{port}', '-sTCP:LISTEN'],
+                             capture_output=True, text=True, timeout=5)
+        lines = [l for l in (out.stdout or '').splitlines()[1:] if l.strip()]
+        return '; '.join(sorted({f"{l.split()[0]}(pid {l.split()[1]})" for l in lines})) or None
+    except (OSError, subprocess.SubprocessError, IndexError):
+        return None
 
 
 def running():
@@ -45,15 +116,8 @@ def start():
     if info:
         print(f"已启动：http://127.0.0.1:{info['port']}")
         return
-    port = int(os.environ.get('TPH_PORT', '8000'))
-    import socket
-    with socket.socket() as sock:
-        # Match uvicorn: recently closed connections must not look like a live listener.
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        try:
-            sock.bind(('0.0.0.0', port))
-        except OSError:
-            raise SystemExit(f'端口 {port} 已被占用，未停止其他进程。请结束旧服务或设置 TPH_PORT。')
+    port = resolve_port()
+    ensure_port_free(port)
     with LOG.open('ab') as log:
         proc = subprocess.Popen([str(ROOT / '.venv/bin/python'), '-m', 'uvicorn', 'backend.app:app',
                                  '--app-dir', str(ROOT), '--host', '0.0.0.0', '--port', str(port),
@@ -77,6 +141,14 @@ def start():
 
 if __name__ == '__main__':
     action = sys.argv[1] if len(sys.argv) > 1 else 'start'
+    load_dotenv()
+    if action == 'log':
+        if not LOG.exists():
+            raise SystemExit(f'暂无日志文件：{LOG}（服务可能从未启动）')
+        if len(sys.argv) > 2 and sys.argv[2] in ('-f', '--follow'):
+            os.execv('/usr/bin/tail', ['tail', '-f', '-n', '50', str(LOG)])
+        print('\n'.join(LOG.read_text(encoding='utf-8', errors='replace').splitlines()[-50:]))
+        raise SystemExit(0)
     with (RUNTIME / 'control.lock').open('w') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         if action in ('pause', 'stop'):
@@ -91,6 +163,9 @@ if __name__ == '__main__':
             start()
         elif action == 'status':
             info = running()
-            print(f"运行中 · PID {info['pid']} · http://127.0.0.1:{info['port']}" if info else '已暂停')
+            if info:
+                print(f"运行中 · PID {info['pid']} · http://127.0.0.1:{info['port']} · 配置端口 {_port_note()}")
+            else:
+                print(f'已暂停 · 下次启动端口 {resolve_port()}（.env TPH_PORT，默认 {DEFAULT_PORT}）')
         else:
-            raise SystemExit('用法：./run.sh start|pause|stop|restart|status')
+            raise SystemExit('用法：./run.sh start|stop|pause|restart|status|log [-f]')
