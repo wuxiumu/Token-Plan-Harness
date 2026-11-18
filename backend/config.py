@@ -37,7 +37,7 @@ BAILIAN_CONFIG = Path(
     os.environ.get("BAILIAN_CONFIG", "~/.bailian/config.json")
 ).expanduser()
 
-# 默认业务空间（阿里云百炼）
+# 默认业务空间（阿里云百炼）；在 .env 配置 BAILIAN_WORKSPACE_ID，勿硬编码真实值
 WORKSPACE_ID = os.environ.get("BAILIAN_WORKSPACE_ID", "")
 
 # 智谱 GLM Code Plan 专用 Key（bigmodel.cn，用于查 Code Plan 用量；一般不同于 ZHIPU_API_KEY）
@@ -57,7 +57,7 @@ PROVIDERS: dict[str, dict] = {
         "kind": "quota",
         "base_url": DASHSCOPE_BASE_URL,
         "env_key": "BAILIAN_API_KEY",
-        "desc": "Token Plan / Harness 权益已配，qwen 全系模型，配额实时可监控，你的主力平台",
+        "desc": "支持配置百炼 API Key；Token Plan 配额查询需要对应控制台授权",
         "score": 4.8,
         "default_models": [
             "qwen-plus", "qwen-turbo", "qwen-max", "qwen-long",
@@ -69,7 +69,7 @@ PROVIDERS: dict[str, dict] = {
         "kind": "quota",
         "base_url": "https://open.bigmodel.cn/api/paas/v4",
         "env_key": "ZHIPU_API_KEY",
-        "desc": "旗舰 GLM-5.3 / 5.3-Flash，1M 上下文、原生多模态，Code Plan 用量已接入",
+        "desc": "可配置智谱模型调用与 Code Plan 配额查询，权限分别管理",
         "score": 4.6,
         "default_models": ["glm-5.3", "glm-5.3-flash"],
     },
@@ -78,7 +78,7 @@ PROVIDERS: dict[str, dict] = {
         "kind": "general",
         "base_url": "https://api.openai.com/v1",
         "env_key": "OPENAI_API_KEY",
-        "desc": "GPT 全球标杆，通用能力全面，生态最成熟",
+        "desc": "使用自有 OpenAI API Key 进行模型体验；与 Codex 订阅额度分开统计",
         "score": 4.5,
         "default_models": ["gpt-4o", "gpt-4o-mini", "gpt-4.1", "gpt-4.1-mini", "o3-mini"],
     },
@@ -87,7 +87,7 @@ PROVIDERS: dict[str, dict] = {
         "kind": "general",
         "base_url": "https://api.deepseek.com/v1",
         "env_key": "DEEPSEEK_API_KEY",
-        "desc": "开源高性价比，Chat 通用 / Reasoner 深度推理",
+        "desc": "使用自有 DeepSeek API Key 进行文本对话与推理体验",
         "score": 4.3,
         "default_models": ["deepseek-chat", "deepseek-reasoner"],
     },
@@ -96,7 +96,7 @@ PROVIDERS: dict[str, dict] = {
         "kind": "general",
         "base_url": "https://api.moonshot.cn/v1",
         "env_key": "KIMI_API_KEY",
-        "desc": "超长上下文（128K），K2 模型推理能力强，中文友好",
+        "desc": "使用 Moonshot API Key 进行模型体验；与 Kimi 会员额度分开统计",
         "score": 4.2,
         "default_models": ["moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k", "kimi-k2"],
     },
@@ -119,3 +119,13 @@ def provider_env_value(pid: str) -> str:
 
 def provider_name(pid: str) -> str:
     return (PROVIDERS.get(pid) or {}).get("name", pid)
+
+# Membership records can be managed without an API key; querying capability is separate.
+for _id, _name, _env, _url in [
+    ("codex", "Codex 会员", "", ""),
+    ("grok", "Grok / xAI", "XAI_API_KEY", "https://api.x.ai/v1"),
+    ("gemini", "Gemini", "GEMINI_API_KEY", "https://generativelanguage.googleapis.com/v1beta/openai"),
+    ("claude", "Claude", "ANTHROPIC_API_KEY", "https://api.anthropic.com")]:
+    PROVIDERS[_id] = {"name": _name, "kind": "general", "env_key": _env,
+                      "base_url": _url, "default_models": [],
+                      "desc": "支持多个账号；会员配额可手工记录，API Key 与会员额度分别管理。"}

@@ -1,4 +1,6 @@
 """Key 管理服务：增删改查 + 从百炼配置/ .env 自动导入各 Provider 的默认 key"""
+from . import cache_settings
+
 import json
 import os
 import time
@@ -12,7 +14,6 @@ from ..storage import get_storage
 
 NS = "key"
 _LIST_CACHE_KEY = "__key_list"
-_LIST_CACHE_TTL = 30  # 秒：Key 列表默认读缓存，手动刷新/写操作后强制更新
 
 
 def _now() -> str:
@@ -60,11 +61,9 @@ def read_bailian_tokenplan() -> Optional[dict]:
 
 
 def bootstrap_default_key() -> None:
-    """启动时自动导入各 Provider 的默认 Key：
+    """从环境变量一次性初始化账号；页面修改、删除后不覆盖或复活。
 
-    - 阿里云百炼 token-plan（从 bl config）
-    - 各 Provider 的 .env / 环境变量 Key（BAILIAN/ZHIPU/OPENAI/DEEPSEEK/KIMI）
-    仅当对应类型的 key 尚未存在时导入，避免重复。
+    支持 PROVIDER_API_KEY_2 等编号槽位，不再隐式导入本机 CLI 凭证。
     """
     s = get_storage()
     # 0) 数据迁移：为旧数据中缺 provider 的 Key 补默认平台（aliyun）
@@ -73,64 +72,51 @@ def bootstrap_default_key() -> None:
             k["provider"] = "aliyun"
             s.set_obj(NS, k["id"], k)
 
-    # 1) 阿里云百炼 token-plan（从 bl config）
-    if not _exists(lambda k: k.get("kind") == "token_plan"):
-        info = read_bailian_tokenplan()
-        if info and info.get("api_key"):
-            item = KeyItem(
-                id=_new_id(),
-                provider="aliyun",
-                name="百炼 Token Plan 默认 Key",
-                kind="token_plan",
-                api_key=info["api_key"],
-                workspace_id=config.WORKSPACE_ID,
-                base_url=info.get("base_url"),
-                models=info.get("models", []),
-                note="从 bl config(token-plan) 自动导入",
-                created_at=_now(), updated_at=_now(),
-            )
-            s.set_obj(NS, item.id, item.model_dump())
-
-    # 2) 各 Provider 的 .env / 环境变量 Key（含阿里云百炼通用 Key）
+    # Environment seeds are imported once. UI edits and deletions survive restarts.
+    import re
+    slots = []
     for pid, meta in config.PROVIDERS.items():
-        val = config.provider_env_value(pid)
-        if not val:
+        prefix = meta.get("env_key")
+        if not prefix:
             continue
-        # 已有该平台 .env Key 时，仅同步最新模型清单（跟随 config），不重复导入
-        existing = None
-        for k in s.list_objs(NS):
-            if k.get("provider") == pid and "env" in (k.get("note") or ""):
-                existing = k
-                break
-        if existing:
-            if existing.get("models") != meta.get("default_models", []):
-                existing["models"] = meta.get("default_models", [])
-                existing["updated_at"] = _now()
-                s.set_obj(NS, existing["id"], existing)
+        for env_name in sorted(os.environ):
+            if env_name == prefix or re.fullmatch(re.escape(prefix) + r"_[1-9][0-9]*", env_name):
+                slots.append((env_name, pid, "general" if meta["kind"] == "general" else "dashscope"))
+    for prefix, pid, kind in [("BAILIAN_TOKENPLAN_API_KEY", "aliyun", "token_plan"),
+                              ("ZHIPU_TOKENPLAN_API_KEY", "zhipu", "code_plan"),
+                              ("XAI_MANAGEMENT_KEY", "grok", "management")]:
+        for env_name in sorted(os.environ):
+            if env_name == prefix or re.fullmatch(prefix + r"_[1-9][0-9]*", env_name):
+                slots.append((env_name, pid, kind))
+    for env_name, pid, kind in slots:
+        value = os.environ.get(env_name, "").strip()
+        if not value or s.get_snapshot("env_import", env_name):
             continue
-        kind = "general" if meta["kind"] == "general" else "dashscope"
-        name = "百炼通用 Key（全部服务）" if pid == "aliyun" else f"{meta['name']} 默认 Key"
-        item = KeyItem(
-            id=_new_id(),
-            provider=pid,
-            name=name,
-            kind=kind,
-            api_key=val,
-            base_url=meta.get("base_url"),
-            models=meta.get("default_models", []),
-            note="从 .env 自动导入",
-            created_at=_now(), updated_at=_now(),
-        )
-        s.set_obj(NS, item.id, item.model_dump())
+        meta = config.PROVIDERS[pid]
+        keys = s.list_objs(NS)
+        match = next((k for k in keys if k.get("provider") == pid and k.get("api_key") == value and k.get("kind") == kind), None)
+        # Adopt legacy env imports rather than overwriting their manually edited values.
+        if not match and env_name == meta.get("env_key"):
+            match = next((k for k in keys if k.get("provider") == pid and "env" in k.get("note", "")), None)
+        if not match:
+            match = create_key({"provider": pid, "kind": kind, "api_key": value,
+                "name": os.environ.get(env_name + "_NAME") or f"{meta['name']} · {env_name}",
+                "base_url": "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1" if kind == "token_plan" else meta.get("base_url"),
+                "workspace_id": os.environ.get(env_name + "_TEAM_ID") or (os.environ.get("XAI_TEAM_ID") if env_name == "XAI_MANAGEMENT_KEY" else None),
+                "models": meta.get("default_models", []), "source": env_name, "note": "从 .env 初始化，可在页面修改"})
+        stored = s.get_obj(NS, match["id"])
+        stored.setdefault("source", env_name)
+        s.set_obj(NS, match["id"], stored)
+        s.set_snapshot("env_import", env_name, {"id": match["id"]})
     _invalidate_list_cache(s)
 
 
 def list_keys(show_secret: bool = False, force: bool = False) -> list[dict]:
     s = get_storage()
-    # 默认读缓存（30s），手动刷新(force) 或写操作后失效
+    # 默认读缓存，手动刷新(force) 或写操作后失效
     if not show_secret and not force:
         snap = s.get_snapshot(NS, _LIST_CACHE_KEY)
-        if snap and time.time() - snap.get("_t", 0) < _LIST_CACHE_TTL:
+        if snap and time.time() - snap.get("_t", 0) < cache_settings.ttl_seconds():
             return snap["data"]
     keys = s.list_objs(NS)
     keys.sort(key=lambda k: k.get("created_at", ""), reverse=True)
@@ -169,6 +155,7 @@ def get_key_with_secret(key_id: str) -> Optional[KeyItem]:
 
 
 def create_key(data: dict) -> dict:
+    _validate_account(data)
     now = _now()
     item = KeyItem(
         id=data.get("id") or _new_id(),
@@ -180,12 +167,15 @@ def create_key(data: dict) -> dict:
         workspace_id=data.get("workspace_id"),
         models=data.get("models", []),
         note=data.get("note", ""),
+        trial_only=data.get("trial_only", False),
+        used_percent=data.get("used_percent"), resets_at=data.get("resets_at"), source=data.get("source", "manual"),
         status=data.get("status", "active"),
         expire_at=data.get("expire_at"),
         created_at=data.get("created_at") or now,
         updated_at=now,
     )
     get_storage().set_obj(NS, item.id, item.model_dump())
+    _sync_bailian(item)
     _invalidate_list_cache(get_storage())
     return item.masked()
 
@@ -195,13 +185,20 @@ def update_key(key_id: str, patch: dict) -> Optional[dict]:
     obj = s.get_obj(NS, key_id)
     if not obj:
         return None
+    if not patch.get("api_key") or "*" in str(patch.get("api_key", "")):
+        patch = {k: v for k, v in patch.items() if k != "api_key"}
+    if patch.get("provider", obj["provider"]) != obj["provider"] and patch.get("kind", obj["kind"]) != "manual" and "api_key" not in patch:
+        raise ValueError("切换平台时请填写新平台的密钥")
+    _validate_account({**obj, **patch})
     item = KeyItem.model_validate(obj)
     for f in ["provider", "name", "kind", "api_key", "base_url", "workspace_id",
-              "models", "note", "status", "expire_at"]:
-        if f in patch and patch[f] is not None:
+              "models", "note", "status", "expire_at", "used_percent", "resets_at", "trial_only"]:
+        if f in patch and (patch[f] is not None or f in ("expire_at", "used_percent", "resets_at", "base_url", "workspace_id")):
             setattr(item, f, patch[f])
+    item = KeyItem.model_validate(item.model_dump())
     item.updated_at = _now()
     s.set_obj(NS, key_id, item.model_dump())
+    _sync_bailian(item, old=obj)
     _invalidate_list_cache(s)
     return item.masked()
 
@@ -213,3 +210,45 @@ def delete_key(key_id: str) -> bool:
     s.delete_obj(NS, key_id)
     _invalidate_list_cache(s)
     return True
+
+
+def _validate_account(data):
+    if data.get("provider", "aliyun") not in config.PROVIDERS:
+        raise ValueError("请选择支持的平台")
+    if not str(data.get("name", "")).strip():
+        raise ValueError("请填写账号名称")
+    if data.get("status", "active") not in ("active", "disabled", "expired"):
+        raise ValueError("无效账号状态")
+    if data.get("kind") == "management" and not data.get("workspace_id"):
+        raise ValueError("请填写 xAI 团队 ID")
+    if data.get("kind") != "manual" and not str(data.get("api_key", "")).strip():
+        raise ValueError("请填写 API Key，或选择会员手工记录")
+    for field in ("expire_at", "resets_at"):
+        if data.get(field):
+            try:
+                datetime.fromisoformat(data[field].replace("Z", "+00:00"))
+            except (TypeError, ValueError):
+                raise ValueError("日期格式无效")
+
+
+def _sync_bailian(item, old=None):
+    from . import bailian_accounts
+    store = get_storage()
+    account = store.get_obj(bailian_accounts.NS, item.id)
+    if item.provider != "aliyun" or item.kind != "token_plan":
+        if account:
+            store.delete_obj(bailian_accounts.NS, item.id)
+        return
+    if not account:
+        bailian_accounts.register(item.id, item.name, {"api_key": item.api_key,
+            "base_url": "https://token-plan.cn-beijing.maas.aliyuncs.com",
+            "console_site": "domestic", "console_region": "cn-beijing"})
+    else:
+        account["label"] = item.name
+        store.set_obj(bailian_accounts.NS, item.id, account)
+        if old and (old.get("api_key") != item.api_key or old.get("workspace_id") != item.workspace_id):
+            # A different key/workspace is a different identity; never reuse console credentials.
+            path = bailian_accounts.config_dir(item.id) / "config.json"
+            path.write_text(json.dumps({"api_key": item.api_key, "workspace_id": item.workspace_id,
+                "console_site": "domestic", "console_region": "cn-beijing", "active_config": "default"}))
+            path.chmod(0o600)

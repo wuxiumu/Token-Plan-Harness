@@ -10,11 +10,10 @@ from .. import config
 from ..adapters.bailian_cli import BailianCli
 from ..models import UsageRecord
 from ..storage import get_storage
-from . import key_service
+from . import key_service, cache_settings, bailian_accounts
 
 REC_NS = "usage_record"
 SNAP_NS = "stats"
-CACHE_TTL = 30 * 60  # 30 分钟缓存一次，默认读缓存为主；手动刷新才强制重新拉取
 
 
 def _sum_usage(records: list[dict]) -> dict:
@@ -56,9 +55,20 @@ def local_stats() -> dict:
     return _sum_usage(records)
 
 
-def live_overview() -> dict:
+def live_overview(account_id=None) -> dict:
     """并行调用百炼 CLI 拉取各方统计"""
-    cli = BailianCli(config.WORKSPACE_ID)
+    account = bailian_accounts.resolve(account_id)
+    credentials = bailian_accounts.credentials(account) if account else {}
+    workspace = credentials.get("workspace_id") if account else config.WORKSPACE_ID
+    account_usage = _sum_usage([r for r in get_storage().list_objs(REC_NS)
+                                if account and r.get("key_id") == account["id"]])
+    if account and not credentials.get("access_token"):
+        api_only = account.get("quota_access") == "api_key_only"
+        return {"account": account, "workspace_id": workspace, "local_usage": account_usage,
+                "quota_status": "api_key_only" if api_only else "needs_console",
+                "token_plan": {"error": "API Key 已保存；官方配额查询需要对应账号的控制台授权。"},
+                "login_command": None if api_only else bailian_accounts.login_command(account)}
+    cli = BailianCli(workspace, bailian_accounts.config_dir(account["id"]) if account else None)
     plan = {
         "auth": ("auth_status", None),
         "usage_summary": ("usage_summary", None),
@@ -78,7 +88,7 @@ def live_overview() -> dict:
         except Exception as e:
             return {"error": str(e)}
 
-    out = {"workspace_id": config.WORKSPACE_ID}
+    out = {"workspace_id": workspace, "account": account, "local_usage": account_usage}
     with ThreadPoolExecutor(max_workers=len(plan)) as ex:
         futures = {ex.submit(run, n, m, a): n for n, (m, a) in plan.items()}
         for fut in futures:
@@ -107,13 +117,13 @@ ZHIPU_USAGE_URL = "https://open.bigmodel.cn/api/monitor/usage/quota/limit"
 _ZHIPU_UNIT = {3: "每5小时", 6: "每周"}
 
 
-def zhipu_code_plan() -> dict:
+def zhipu_code_plan(api_key=None) -> dict:
     """智谱 GLM Code Plan 订阅用量（真实拉取）。
 
     端点 GET {host}/api/monitor/usage/quota/limit，Authorization: Coding-Plan Key。
     返回每5小时 + 每周积分额度、已用/剩余/百分比/下次重置。
     """
-    key = config.ZHIPU_TOKENPLAN_API_KEY or config.provider_env_value("zhipu")
+    key = api_key if api_key is not None else config.ZHIPU_TOKENPLAN_API_KEY or config.provider_env_value("zhipu")
     if not key:
         return {
             "configured": False, "status": "not_configured",
@@ -153,10 +163,39 @@ def zhipu_code_plan() -> dict:
                 "note": str(e)}
 
 
+def quota_source(name: str, force: bool = False, account_id=None, cache_only=False) -> dict:
+    """Read one quota source using the same snapshots as the overview."""
+    if name not in ("live", "zhipu"):
+        raise ValueError("unknown quota source")
+    store = get_storage()
+    account = bailian_accounts.resolve(account_id) if name == "live" else None
+    key = bailian_accounts.cache_key(account) if name == "live" else "mod_" + name
+    snap = store.get_snapshot(SNAP_NS, key)
+    if cache_only:
+        cached = cache_settings.cached_result(snap)
+        return {'data': snap['data'] if snap else {}, **{k: v for k, v in cached.items() if k in ('updated_at', 'cached', 'cache_miss', 'expired', 'stale')}}
+
+    def usable(data):
+        if name == "live":
+            plan = data.get("token_plan")
+            return isinstance(plan, dict) and "error" not in plan and isinstance(plan.get("per1MonthPercentage"), (int, float))
+        return data.get("status") == "ok"
+
+    if not force and snap and time.time() - snap.get("_t", 0) < cache_settings.ttl_seconds():
+        return {"data": snap["data"], "updated_at": snap["_t"], "cached": True, "stale": False}
+    data = live_overview(account["id"] if account else None) if name == "live" else zhipu_code_plan()
+    if not usable(data) and snap and usable(snap.get("data", {})):
+        return {"data": snap["data"], "updated_at": snap["_t"], "cached": True, "stale": True}
+    now = time.time()
+    if usable(data):
+        store.set_snapshot(SNAP_NS, key, {"_t": now, "data": data})
+    return {"data": data, "updated_at": now, "cached": False, "stale": False}
+
+
 def build_overview(force: bool = False, force_tabs: Optional[list[str]] = None) -> dict:
     """综合：本地累计 + 实时云端概览 + 各 Provider 汇总 + 智谱 Code Plan。
 
-    缓存策略：默认读缓存为主（每模块独立缓存，30 分钟）。
+    缓存策略：默认读缓存为主（每模块独立缓存，时间由全局设置控制）。
       - force=True：全量强制重新拉取（概览页「刷新」）
       - force_tabs=[...]：只强制刷新指定模块（live / zhipu / local），其余走缓存
     """
@@ -167,18 +206,19 @@ def build_overview(force: bool = False, force_tabs: Optional[list[str]] = None) 
         forced = force or (name in force_tabs)
         if not forced:
             snap = s.get_snapshot(SNAP_NS, key)
-            if snap and time.time() - snap.get("_t", 0) < CACHE_TTL:
+            if snap and time.time() - snap.get("_t", 0) < cache_settings.ttl_seconds():
                 return snap["data"]
         data = builder()
         s.set_snapshot(SNAP_NS, key, {"_t": time.time(), "data": data})
         return data
 
     local = _mod("local", local_stats, "mod_local")
-    live = _mod("live", live_overview, "mod_live")
+    live = quota_source("live", force=force or "live" in force_tabs)["data"]
     zhipu = _mod("zhipu", zhipu_code_plan, "mod_zhipu")
     providers = _provider_summary()  # 读 Key 缓存现算，不单独缓存
     return {
         "local": local,
+        "bailian_accounts": bailian_accounts.list_accounts(),
         "live": live,
         "providers": providers,
         "zhipu_code_plan": zhipu,

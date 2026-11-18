@@ -56,6 +56,17 @@ def chat(
     key = key_service.get_key_with_secret(key_id)
     if not key:
         raise ValueError("key not found")
+    if key.status != "active":
+        raise ValueError("该 Key 已停用或过期，请在 Key 管理中检查")
+    if key.expire_at:
+        try:
+            expiry = datetime.fromisoformat(key.expire_at.replace("Z", "+00:00"))
+        except ValueError:
+            raise ValueError("Key 到期时间无效，请在 Key 管理中修正")
+        if expiry <= datetime.now(expiry.tzinfo):
+            raise ValueError("该 Key 已到期，请更新后再调用")
+    if key.kind in ("manual", "management"):
+        raise ValueError("此账号仅用于配额记录或费用查询，不能用于模型调用")
     if not key.api_key:
         raise ValueError("key has no api_key; add one first")
 

@@ -1,5 +1,5 @@
-/* 多模型试画视图（多 Provider）
- * 两级流程：先「平台预览」看各平台优势介绍 + 推荐分，点击进入后
+/* 模型体验视图（多 Provider）
+ * 两级流程：先「平台预览」查看各平台接入说明，点击进入后
  * 再选择该平台的 Key 与模型（平台与模型严格绑定，不跨平台混用）。 */
 /* 新手友好的 Demo 场景：点一下自动填 prompt，并切到本平台合适模型 */
 const TRIAL_DEMOS = [
@@ -44,22 +44,22 @@ App.Views.trial = {
   /* ---------- 视图一：平台预览 ---------- */
   renderPreview() {
     const root = document.getElementById("t-root");
-    const sorted = [...this._providers].sort((a, b) => (b.score || 0) - (a.score || 0));
+    const sorted = [...this._providers];
     root.innerHTML = `
       <div class="panel">
         <div class="row" style="align-items:center;gap:10px;margin-bottom:4px">
-          <h3 style="margin:0">选择平台 · 多模型试画</h3>
+          <h3 style="margin:0">选择平台 · 模型体验</h3>
           <div class="spacer"></div>
           <button class="btn ghost" id="t-refresh">刷新数据</button>
         </div>
         <p class="muted" style="margin-bottom:12px">
-          先看各平台优势与推荐分，点击进入后选择该平台的 Key 与模型
-          （平台与模型严格绑定，不跨平台混用）。无 Key 的平台请在 Key 管理或 .env 补充。
+          使用已配置的平台进行文本对话测试，点击进入后选择对应 Key 与模型
+          （平台与模型严格绑定，不跨平台混用）。调用会使用所选账号的额度；用量记录仅覆盖通过本工作台发起的请求。
         </p>
         <div id="t-cards" class="card-grid"></div>
       </div>
       <div class="panel">
-        <h3>试画记录</h3>
+        <h3>体验记录</h3>
         <table>
           <thead><tr><th>时间</th><th>平台</th><th>模型</th><th>Prompt</th><th>Token</th><th>状态</th></tr></thead>
           <tbody id="t-history"></tbody>
@@ -79,24 +79,24 @@ App.Views.trial = {
   },
 
   card(p) {
-    const keys = this._keys.filter((k) => k.provider === p.id);
+    const keys = this._keys.filter((k) => k.provider === p.id && !["manual","management"].includes(k.kind) && k.status === "active" && (!k.expire_at || new Date(k.expire_at) > new Date()));
     const conf = keys.length;
     const models = (p.models || []).length;
-    const score = Number(p.score || 0).toFixed(1);
+
     return `
       <div class="t-card">
         <div class="t-card-head">
           <span class="tag ${p.kind === "quota" ? "" : "blue"}">${p.kind === "quota" ? "配额类" : "通用 Key"}</span>
-          <span class="t-score" title="推荐分">★ ${score}</span>
+
         </div>
         <h4>${fmt.esc(p.name)}</h4>
         <p class="muted">${fmt.esc(p.desc)}</p>
         <div class="row" style="font-size:12px;color:var(--muted);gap:6px">
-          <span>Key：${conf ? `<span class="tag green">${conf} 个可用</span>` : `<span class="tag red">待填 .env</span>`}</span>
+          <span>Key：${conf ? `<span class="tag green">${conf} 个已配置</span>` : `<span class="tag red">待配置</span>`}</span>
           <span>模型 ${models} 个</span>
         </div>
         <button class="btn ${conf ? "" : "ghost"}" data-enter="${p.id}" ${conf ? "" : "disabled"}>
-          ${conf ? "进入试画 →" : "暂无 Key"}
+          ${conf ? "开始体验 →" : "暂无启用的 Key"}
         </button>
       </div>`;
   },
@@ -117,7 +117,7 @@ App.Views.trial = {
       <div class="panel">
         <div class="row" style="align-items:center;gap:10px;margin-bottom:4px">
           <button class="btn ghost" id="t-back">← 返回平台</button>
-          <h3 style="margin:0">${fmt.esc(p.name)} · 试画</h3>
+          <h3 style="margin:0">${fmt.esc(p.name)} · 模型体验</h3>
         </div>
         <p class="muted">${fmt.esc(p.desc)}</p>
         <div class="row" style="margin-top:12px">
@@ -147,7 +147,7 @@ App.Views.trial = {
 
   /* 填本平台 Key + 模型（严格绑定 pid，不混用） */
   fillKeyModel(p) {
-    const keys = this._keys.filter((k) => k.provider === p.id);
+    const keys = this._keys.filter((k) => k.provider === p.id && !["manual","management"].includes(k.kind) && k.status === "active" && (!k.expire_at || new Date(k.expire_at) > new Date()));
     const keySel = document.getElementById("t-key");
     keySel.innerHTML = keys.map((k) =>
       `<option value="${k.id}">${fmt.esc(k.name)} (${fmt.esc(k.api_key)})</option>`).join("") ||

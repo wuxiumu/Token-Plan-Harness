@@ -3,7 +3,7 @@
  * 刷新后从 hash 恢复当前视图与 tab；访问记录随视图切换上报（URL 带 hash）。 */
 window.App = { Views: {} };
 
-const VIEW_NAMES = ["stats", "keys", "trial", "service"];
+const VIEW_NAMES = ["stats", "keys", "trial", "service", "domains", "manual"];
 let currentView = null;
 
 function parseHash() {
@@ -54,11 +54,24 @@ document.addEventListener("DOMContentLoaded", async () => {
     btn.onclick = () => switchView(btn.dataset.view);
   });
 
+  const cacheInput = document.getElementById("cache-minutes");
+  const cacheResult = document.getElementById("cache-result");
+  try { cacheInput.value = (await API.get("/api/settings/cache")).minutes; }
+  catch (_) { cacheResult.textContent = "读取设置失败"; }
+  document.getElementById("cache-settings").onsubmit = async (event) => {
+    event.preventDefault();
+    try {
+      const result = await API.put("/api/settings/cache", { minutes: Number(cacheInput.value) });
+      cacheInput.value = result.minutes;
+      cacheResult.textContent = "已保存";
+    } catch (e) { cacheResult.textContent = e.message; }
+  };
+
   // 系统信息
   try {
     const h = await API.get("/api/health");
     document.getElementById("sys-info").textContent =
-      `存储: ${h.storage_mode} · 工作空间: ${h.workspace_id}`;
+      `存储: ${h.storage_mode} · ${h.primary_account ? "主账号: " + h.primary_account.label : "工作空间: " + h.workspace_id}`;
   } catch (e) {
     document.getElementById("sys-info").textContent = "后端未连接";
   }

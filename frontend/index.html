@@ -3,19 +3,22 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AI-Key 管理工作台</title>
-  <link rel="stylesheet" href="static/css/style.css">
+  <title>AI-账号管理工作台</title>
+  <link rel="stylesheet" href="static/css/style.css?v=20261111-1">
 </head>
 <body>
   <header class="topbar">
-    <div class="brand">AI-Key 工作台</div>
+    <div class="brand">五棵松工作台</div>
     <nav class="nav">
-      <button data-view="stats" class="nav-btn active">统计概览</button>
-      <button data-view="keys" class="nav-btn">Key 管理</button>
-      <button data-view="trial" class="nav-btn">多模型试画</button>
-      <button data-view="service" class="nav-btn">服务测试</button>
+      <button data-view="stats" class="nav-btn active">概览</button>
+      <button data-view="keys" class="nav-btn">账号</button>
+      <button data-view="trial" class="nav-btn">模型体验</button>
+      <button data-view="service" class="nav-btn">工具</button>
+      <button data-view="domains" class="nav-btn">域名监控</button>
+      <button data-view="manual" class="nav-btn">说明书</button>
     </nav>
-    <div class="sys" id="sys-info">…</div>
+    <form id="cache-settings" class="cache-settings" title="适用于统计、Codex、权益及 Key 列表缓存"><label>缓存 <input id="cache-minutes" type="number" min="0" max="1440" step="1" required> 分钟</label> <button class="btn ghost sm" type="submit">保存</button> <span id="cache-result" aria-live="polite"></span></form>
+    <button class="btn ghost sm" id="share-button" type="button">分享 ↗</button><div class="sys" id="sys-info">…</div>
   </header>
 
   <main class="container">
@@ -23,14 +26,21 @@
     <section id="view-keys" class="view"></section>
     <section id="view-trial" class="view"></section>
     <section id="view-service" class="view"></section>
+    <section id="view-domains" class="view"></section>
+    <section id="view-manual" class="view"></section>
   </main>
 
+  <dialog id="share-dialog"><div class="share-heading"><h2>局域网分享</h2><button class="btn ghost sm" id="share-close" type="button">关闭</button></div><p>分享只读配额看板，不开放密钥管理和调用功能。</p><label for="share-address">本机局域网地址</label><select id="share-address"></select><input id="share-link" readonly aria-label="分享链接"><div class="share-actions"><button class="btn" id="share-copy" type="button">复制链接</button><a id="share-open" target="_blank" rel="noopener noreferrer">预览分享页 ↗</a></div><img id="share-qr" alt="扫描二维码打开局域网看板" hidden><p id="share-status" role="status"></p></dialog>
+  <script src="static/js/share.js?v=20261104-22"></script>
   <script src="static/js/vendor/echarts.min.js"></script>
   <script src="static/js/api.js"></script>
-  <script src="static/js/app.js"></script>
-  <script src="static/js/views/keys.js"></script>
-  <script src="static/js/views/stats.js"></script>
-  <script src="static/js/views/trial.js"></script>
+  <script src="static/js/app.js?v=20261111-2"></script>
+  <script src="static/js/views/keys.js?v=20261104-22"></script>
+  <script src="static/js/dashboard.js?v=20261107-24"></script>
+  <script src="static/js/views/stats.js?v=20261107-24"></script>
+  <script src="static/js/views/trial.js?v=20261104-22"></script>
   <script src="static/js/views/service.js"></script>
+  <script src="static/js/views/domains.js"></script>
+  <script src="static/js/views/manual.js?v=20261111-2"></script>
 </body>
 </html>

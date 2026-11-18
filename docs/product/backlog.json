@@ -1,0 +1,641 @@
+{
+  "schema_version": 1,
+  "updated_at": "2026-11-04",
+  "target": "personal_and_small_teams_local_first",
+  "tasks": [
+    {
+      "id": "BASE-001",
+      "title": "模型体验措辞与失效 Key 拦截",
+      "priority": "P0",
+      "milestone": "foundation",
+      "status": "done",
+      "depends_on": [],
+      "references": [
+        "frontend/js/views/trial.js",
+        "backend/services/trial_service.py"
+      ],
+      "deliverables": [
+        "tests/test_trial_access.py"
+      ],
+      "steps": [
+        "移除无依据推荐分并说明调用范围",
+        "前后端拦截已停用和到期 Key"
+      ],
+      "acceptance": [
+        "所有失效 Key 均在 HTTP 调用前失败",
+        "无推荐分、文本体验名称清晰",
+        "原有账号与凭证不变"
+      ],
+      "verification": [
+        ".venv/bin/python -m unittest discover -s tests -v",
+        "git diff --check",
+        "node --check frontend/js/views/trial.js"
+      ],
+      "rollback": "回退本任务对应文案与调用前校验，不改变已有数据",
+      "evidence": [
+        "docs/product/VALIDATION-2026-11-04.md",
+        "tests/test_trial_access.py",
+        "frontend/js/views/trial.js",
+        "backend/services/trial_service.py"
+      ],
+      "blocked_reason": ""
+    },
+    {
+      "id": "SEC-001",
+      "title": "本地管理认证与请求边界",
+      "priority": "P0",
+      "milestone": "M0",
+      "status": "todo",
+      "depends_on": [],
+      "references": [
+        "docs/product/ARCHITECTURE.md",
+        "docs/product/READINESS.md",
+        "backend/app.py",
+        "backend/services/trial_service.py"
+      ],
+      "deliverables": [
+        "backend/services/auth_service.py",
+        "tests/test_auth.py"
+      ],
+      "steps": [
+        "初始化本地管理员与安全会话",
+        "校验 Host、Origin 和变更请求 CSRF",
+        "设计自定义上游地址和显式本地模型连接规则"
+      ],
+      "acceptance": [
+        "伪造 Forwarded/Host/跨站请求不能读写管理 API",
+        "未登录不能操作 Key 或触发模型调用",
+        "默认拒绝 metadata/重定向到受限地址，显式本地模型仍可用",
+        "分享只读接口和合法登录可用"
+      ],
+      "verification": [
+        ".venv/bin/python -m unittest discover -s tests -v",
+        "git diff --check"
+      ],
+      "rollback": "用本地备份恢复旧版；旧版只允许回环监听，不回退成公网匿名管理",
+      "evidence": [],
+      "blocked_reason": ""
+    },
+    {
+      "id": "SEC-002",
+      "title": "凭证库与正文保留策略",
+      "priority": "P0",
+      "milestone": "M0",
+      "status": "todo",
+      "depends_on": [
+        "SEC-001"
+      ],
+      "references": [
+        "docs/product/ARCHITECTURE.md",
+        "docs/product/READINESS.md",
+        "backend/services/key_service.py",
+        "backend/services/trial_service.py"
+      ],
+      "deliverables": [
+        "backend/services/credential_store.py",
+        "tests/test_credentials.py"
+      ],
+      "steps": [
+        "提供系统凭证库适配与缺失时的明确错误",
+        "备份后迁移明文 Key 到凭证引用",
+        "默认不记录提示词正文，提供启用/保留期/删除设置"
+      ],
+      "acceptance": [
+        "API/日志/备份样本无明文秘密",
+        "失败迁移不丢失原凭证且可恢复",
+        "默认新请求不落盘提示词或响应正文",
+        "不修改其他 CLI 的凭证"
+      ],
+      "verification": [
+        ".venv/bin/python -m unittest discover -s tests -v",
+        "git diff --check"
+      ],
+      "rollback": "从受保护备份恢复凭证映射；不自动删除旧文件",
+      "evidence": [],
+      "blocked_reason": ""
+    },
+    {
+      "id": "SEC-003",
+      "title": "可选择、可撤销、可过期的分享",
+      "priority": "P0",
+      "milestone": "M0",
+      "status": "todo",
+      "depends_on": [
+        "SEC-001"
+      ],
+      "references": [
+        "docs/product/ARCHITECTURE.md",
+        "docs/product/READINESS.md",
+        "backend/services/share_service.py",
+        "frontend/js/share.js"
+      ],
+      "deliverables": [
+        "tests/test_share_tokens.py"
+      ],
+      "steps": [
+        "新增 ShareView 与 token_hash",
+        "选择账号和允许字段，默认排除个人",
+        "提供到期和撤销，升级现有匿名 LAN 页面"
+      ],
+      "acceptance": [
+        "错误/过期/撤销 token 均拒绝",
+        "公开响应无凭证/提示词/内部路径",
+        "未选择账号的数据不可访问",
+        "二维码与当前视图匹配"
+      ],
+      "verification": [
+        ".venv/bin/python -m unittest discover -s tests -v",
+        "git diff --check",
+        "node --check frontend/js/share.js"
+      ],
+      "rollback": "撤销所有新分享并回环监听；不恢复匿名分享",
+      "evidence": [],
+      "blocked_reason": ""
+    },
+    {
+      "id": "DATA-001",
+      "title": "明确持久化主存储和可逆迁移",
+      "priority": "P0",
+      "milestone": "M0",
+      "status": "todo",
+      "depends_on": [
+        "SEC-002"
+      ],
+      "references": [
+        "docs/product/ARCHITECTURE.md",
+        "docs/product/READINESS.md",
+        "backend/storage/__init__.py",
+        "backend/storage/file_store.py"
+      ],
+      "deliverables": [
+        "backend/storage/sqlite_store.py",
+        "scripts/migrate_storage.py"
+      ],
+      "steps": [
+        "SQLite 作为本地事实存储，Redis 可选缓存",
+        "提供 dry-run/备份/事务导入/校验/显式切换",
+        "修正文件原子写与故障错误提示"
+      ],
+      "acceptance": [
+        "Redis 和文件样本迁移前后计数与字段一致",
+        "中断迁移不破坏源数据",
+        "重启不静默切换到空存储",
+        "备份恢复演练通过"
+      ],
+      "verification": [
+        ".venv/bin/python -m unittest discover -s tests -v",
+        "git diff --check"
+      ],
+      "rollback": "切回导入前备份及原存储配置，保留迁移报告",
+      "evidence": [],
+      "blocked_reason": ""
+    },
+    {
+      "id": "CONN-001",
+      "title": "连接器能力与统一数据契约",
+      "priority": "P0",
+      "milestone": "M0",
+      "status": "todo",
+      "depends_on": [
+        "SEC-002"
+      ],
+      "references": [
+        "docs/product/ARCHITECTURE.md",
+        "docs/product/READINESS.md",
+        "backend/services/stats_service.py"
+      ],
+      "deliverables": [
+        "backend/adapters/contracts.py",
+        "docs/product/provider-matrix.json"
+      ],
+      "steps": [
+        "定义 account/source/scope/health/window DTO",
+        "逐平台声明读取方式、权限与不支持能力",
+        "迁移现有采集器并加入脱敏 fixture"
+      ],
+      "acceptance": [
+        "每个平台支持成功/未授权/网络/结构变更测试",
+        "未知用量不是 0",
+        "手动记录与官方数据清晰区分",
+        "公司 Key 不借个人授权"
+      ],
+      "verification": [
+        ".venv/bin/python -m unittest discover -s tests -v",
+        "git diff --check"
+      ],
+      "rollback": "保留原响应适配层，按连接器回退而不混合缓存",
+      "evidence": [],
+      "blocked_reason": ""
+    },
+    {
+      "id": "DATA-002",
+      "title": "金额与配额的可信展示",
+      "priority": "P0",
+      "milestone": "M0",
+      "status": "todo",
+      "depends_on": [
+        "CONN-001"
+      ],
+      "references": [
+        "docs/product/ARCHITECTURE.md",
+        "docs/product/READINESS.md",
+        "backend/services/trial_service.py",
+        "backend/services/mcp_log_service.py",
+        "frontend/js/views/stats.js"
+      ],
+      "deliverables": [
+        "tests/test_measurements.py"
+      ],
+      "steps": [
+        "未知成本改为 null，标记价格版本和来源",
+        "修复计费单位并采用 Decimal",
+        "不同币种/单位/时间窗口不直接求和"
+      ],
+      "acceptance": [
+        "未知价格不会出现免费/零元承诺",
+        "已知样例与计价公式匹配",
+        "旧记录可兼容且被标记历史估算",
+        "前端显示数据来源、范围、更新时间"
+      ],
+      "verification": [
+        ".venv/bin/python -m unittest discover -s tests -v",
+        "git diff --check",
+        "node --check frontend/js/views/stats.js"
+      ],
+      "rollback": "恢复旧展示适配器但保留未知标识，不篡改历史账单",
+      "evidence": [],
+      "blocked_reason": ""
+    },
+    {
+      "id": "ONB-001",
+      "title": "无个人配置的新用户接入",
+      "priority": "P0",
+      "milestone": "M0",
+      "status": "todo",
+      "depends_on": [
+        "CONN-001",
+        "DATA-001"
+      ],
+      "references": [
+        "docs/product/ARCHITECTURE.md",
+        "docs/product/READINESS.md",
+        "backend/config.py",
+        "run.sh",
+        "scripts/workbench.py"
+      ],
+      "deliverables": [
+        "scripts/doctor.py",
+        "frontend/js/views/onboarding.js"
+      ],
+      "steps": [
+        "去掉硬编码工作空间和开发者路径",
+        "实现只读诊断、合成演示与用户选择导入",
+        "支持公司 API Key-only 和会员登录的差异引导"
+      ],
+      "acceptance": [
+        "干净 HOME/数据目录不出现开发者数据",
+        "用户拒绝导入时不读入本地凭证",
+        "诊断不输出 secret、不发收费请求",
+        "满足外部登录条件时能完成首个连接"
+      ],
+      "verification": [
+        ".venv/bin/python -m unittest discover -s tests -v",
+        "git diff --check"
+      ],
+      "rollback": "关闭新引导入口，保留已导入账号，不回填个人默认值",
+      "evidence": [],
+      "blocked_reason": ""
+    },
+    {
+      "id": "SCHED-001",
+      "title": "浏览器关闭后的稳定采集",
+      "priority": "P1",
+      "milestone": "M1",
+      "status": "todo",
+      "depends_on": [
+        "CONN-001",
+        "DATA-001"
+      ],
+      "references": [
+        "docs/product/ARCHITECTURE.md",
+        "docs/product/READINESS.md"
+      ],
+      "deliverables": [
+        "backend/services/scheduler.py",
+        "tests/test_scheduler.py"
+      ],
+      "steps": [
+        "按连接器限速、重试退避和请求合并",
+        "保留最近成功快照与原始时间",
+        "区分采集间隔与缓存 TTL"
+      ],
+      "acceptance": [
+        "关闭浏览器仍按计划采集",
+        "同账号并发不会重复请求",
+        "断网保留旧数据并标 stale",
+        "TTL=0 不触发无限循环"
+      ],
+      "verification": [
+        ".venv/bin/python -m unittest discover -s tests -v",
+        "git diff --check"
+      ],
+      "rollback": "停止调度器，退回手动刷新并保留历史",
+      "evidence": [],
+      "blocked_reason": ""
+    },
+    {
+      "id": "UX-001",
+      "title": "统一账号卡片与故障恢复流程",
+      "priority": "P1",
+      "milestone": "M1",
+      "status": "todo",
+      "depends_on": [
+        "DATA-002",
+        "ONB-001"
+      ],
+      "references": [
+        "docs/product/PRODUCT.md",
+        "frontend/js/views/stats.js"
+      ],
+      "deliverables": [
+        "tests/ui/README.md"
+      ],
+      "steps": [
+        "统一状态/刷新/重连组件",
+        "提供列表与海报模式",
+        "优化手机、键盘与大字体访问"
+      ],
+      "acceptance": [
+        "360px 和桌面无横向遮挡",
+        "未知/缓存/过期/手工状态可区分",
+        "可以独立刷新账号且不丢视图",
+        "有截图和关键流程验证记录"
+      ],
+      "verification": [
+        ".venv/bin/python -m unittest discover -s tests -v",
+        "git diff --check",
+        "node --check frontend/js/views/stats.js"
+      ],
+      "rollback": "保留旧布局开关，数据契约不回退",
+      "evidence": [],
+      "blocked_reason": ""
+    },
+    {
+      "id": "HIST-001",
+      "title": "历史趋势与脱敏导出",
+      "priority": "P1",
+      "milestone": "M1",
+      "status": "todo",
+      "depends_on": [
+        "SCHED-001",
+        "DATA-002"
+      ],
+      "references": [
+        "docs/product/ARCHITECTURE.md",
+        "docs/product/READINESS.md"
+      ],
+      "deliverables": [
+        "backend/services/history_service.py"
+      ],
+      "steps": [
+        "记录配额快照与保留期",
+        "按账号窗口展示趋势",
+        "CSV/JSON 导出带来源与时区"
+      ],
+      "acceptance": [
+        "缺测不插值成使用量",
+        "跨重置窗口不算负使用",
+        "导出不包含凭证/默认不含正文",
+        "删除保留期外数据可验证"
+      ],
+      "verification": [
+        ".venv/bin/python -m unittest discover -s tests -v",
+        "git diff --check"
+      ],
+      "rollback": "关闭历史写入，保留数据库备份和导出",
+      "evidence": [],
+      "blocked_reason": ""
+    },
+    {
+      "id": "ALERT-001",
+      "title": "本地提醒与通知去重",
+      "priority": "P1",
+      "milestone": "M1",
+      "status": "todo",
+      "depends_on": [
+        "SCHED-001"
+      ],
+      "references": [
+        "docs/product/ARCHITECTURE.md",
+        "docs/product/READINESS.md"
+      ],
+      "deliverables": [
+        "backend/services/alert_service.py"
+      ],
+      "steps": [
+        "实现额度阈值/重置/授权失效规则",
+        "按账号和窗口去重与冷却",
+        "先做站内提醒，外发渠道由用户显式配置"
+      ],
+      "acceptance": [
+        "同一条件无重复轰炸",
+        "过期快照不触发假的额度告警",
+        "阈值恢复再越界能再次提醒",
+        "默认不向外部发送消息"
+      ],
+      "verification": [
+        ".venv/bin/python -m unittest discover -s tests -v",
+        "git diff --check"
+      ],
+      "rollback": "禁用提醒任务并保留用户规则",
+      "evidence": [],
+      "blocked_reason": ""
+    },
+    {
+      "id": "DIST-001",
+      "title": "可重复安装、升级与卸载",
+      "priority": "P1",
+      "milestone": "M1",
+      "status": "todo",
+      "depends_on": [
+        "ONB-001",
+        "UX-001",
+        "SEC-003"
+      ],
+      "references": [
+        "docs/product/ARCHITECTURE.md",
+        "docs/product/READINESS.md",
+        "requirements.txt",
+        "scripts/workbench.py"
+      ],
+      "deliverables": [
+        "docs/INSTALL.md",
+        "docs/UPGRADE.md",
+        "dependency-lock.txt"
+      ],
+      "steps": [
+        "锁定已验证依赖并记录许可证清单",
+        "macOS 干净环境安装/升级/回滚",
+        "数据备份、端口冲突、网络失败、卸载保留数据"
+      ],
+      "acceptance": [
+        "至少两个干净环境验证",
+        "升级失败可回到旧版本和数据",
+        "包中无开发者凭证/数据/绝对路径",
+        "只声明实际测试过的平台"
+      ],
+      "verification": [
+        ".venv/bin/python -m unittest discover -s tests -v",
+        "git diff --check"
+      ],
+      "rollback": "使用前一发布包和升级前数据库备份",
+      "evidence": [],
+      "blocked_reason": ""
+    },
+    {
+      "id": "BIZ-001",
+      "title": "用户试点与价格验证",
+      "priority": "P1",
+      "milestone": "M1",
+      "status": "todo",
+      "depends_on": [
+        "DIST-001",
+        "HIST-001",
+        "ALERT-001"
+      ],
+      "references": [
+        "docs/product/PRODUCT.md"
+      ],
+      "deliverables": [
+        "docs/product/PILOT_RESULTS.md"
+      ],
+      "steps": [
+        "准备合成数据演示与访谈表",
+        "负责人招募 5 个人与 2 团队",
+        "记录安装成功率、留存、愿付费与支持成本"
+      ],
+      "acceptance": [
+        "反馈是实际样本而非生成结论",
+        "明确达标或调整方案",
+        "不收集用户密钥",
+        "最终价格仍由负责人决定"
+      ],
+      "verification": [
+        "python3 scripts/product_plan.py validate"
+      ],
+      "rollback": "停止试点招募，保留匿名反馈与退出/导出通道",
+      "evidence": [],
+      "blocked_reason": ""
+    },
+    {
+      "id": "TEAM-001",
+      "title": "本地团队角色与操作审计",
+      "priority": "P2",
+      "milestone": "M2",
+      "status": "todo",
+      "depends_on": [
+        "SEC-001",
+        "SEC-003",
+        "DATA-001",
+        "BIZ-001"
+      ],
+      "references": [
+        "docs/product/ARCHITECTURE.md",
+        "docs/product/READINESS.md"
+      ],
+      "deliverables": [
+        "tests/test_team_permissions.py"
+      ],
+      "steps": [
+        "定义 owner/admin/viewer 和工作空间权限",
+        "每个 API 服务端检查访问范围",
+        "成员撤销与审计记录"
+      ],
+      "acceptance": [
+        "跨团队/角色访问测试全部拒绝",
+        "撤销立即失效",
+        "viewer 不能触发收费请求",
+        "日志不记录 secret"
+      ],
+      "verification": [
+        ".venv/bin/python -m unittest discover -s tests -v",
+        "git diff --check"
+      ],
+      "rollback": "撤销团队访问并保留本机 owner 导出权限",
+      "evidence": [],
+      "blocked_reason": ""
+    },
+    {
+      "id": "LIC-001",
+      "title": "许可证、离线宽限与套餐权益",
+      "priority": "P2",
+      "milestone": "M2",
+      "status": "todo",
+      "depends_on": [
+        "BIZ-001",
+        "TEAM-001"
+      ],
+      "references": [
+        "docs/product/PRODUCT.md",
+        "docs/product/ARCHITECTURE.md"
+      ],
+      "deliverables": [
+        "docs/product/LICENSING.md",
+        "tests/test_entitlements.py"
+      ],
+      "steps": [
+        "负责人确认商业方案后实现签名许可证",
+        "明确离线宽限、换机、退款/撤销边界",
+        "付款适配先沙盒测试，不自动上线"
+      ],
+      "acceptance": [
+        "篡改许可证不能升级权益",
+        "到期/断网仍可读与导出数据",
+        "授权状态不影响第三方账号凭证",
+        "不伪造支付成功"
+      ],
+      "verification": [
+        ".venv/bin/python -m unittest discover -s tests -v",
+        "git diff --check"
+      ],
+      "rollback": "禁用收费激活入口，保留数据读取导出",
+      "evidence": [],
+      "blocked_reason": ""
+    },
+    {
+      "id": "REL-001",
+      "title": "发布证据与商用许可核对",
+      "priority": "P1",
+      "milestone": "M1",
+      "status": "todo",
+      "depends_on": [
+        "DIST-001",
+        "BIZ-001"
+      ],
+      "references": [
+        "docs/product/READINESS.md",
+        "docs/product/PRODUCT.md"
+      ],
+      "deliverables": [
+        "docs/product/RELEASE_CHECKLIST.md"
+      ],
+      "steps": [
+        "逐平台核对接口使用和分发许可",
+        "准备隐私说明、退款/支持流程及更新政策",
+        "汇总测试/恢复/依赖审计证据交负责人确认"
+      ],
+      "acceptance": [
+        "所有 P0 已完成",
+        "已核对目标平台条款，未核对连接器标实验性不作售卖承诺",
+        "没有未经确认的隐私上传或自动扣费",
+        "负责人明确批准发布前不发布"
+      ],
+      "verification": [
+        "python3 scripts/product_plan.py validate"
+      ],
+      "rollback": "撤回待发布包并关闭新销售，不影响现有数据导出",
+      "evidence": [],
+      "blocked_reason": ""
+    }
+  ]
+}

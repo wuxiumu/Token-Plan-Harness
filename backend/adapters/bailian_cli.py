@@ -12,12 +12,19 @@ import subprocess
 from typing import Any, Optional
 
 
-def _run(args: list[str], workspace_id: Optional[str] = None, timeout: int = 60) -> Optional[Any]:
+def _run(args: list[str], workspace_id: Optional[str] = None, timeout: int = 60, config_dir=None) -> Optional[Any]:
     cmd = ["bl"] + args + ["--output", "json"]
     if workspace_id:
         cmd += ["--workspace-id", workspace_id]
     env = dict(os.environ)
     env["NO_COLOR"] = "1"
+    if config_dir is not None:
+        # Keep account credentials isolated from the parent shell and global CLI.
+        for name in list(env):
+            if name.startswith(("DASHSCOPE_", "ALIBABA_CLOUD_", "BAILIAN_")):
+                env.pop(name, None)
+        env["BAILIAN_CONFIG_DIR"] = str(config_dir)
+        cmd += ["--config", "default"]
     try:
         p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=env)
     except subprocess.TimeoutExpired:
@@ -36,48 +43,52 @@ def _run(args: list[str], workspace_id: Optional[str] = None, timeout: int = 60)
 
 
 class BailianCli:
-    def __init__(self, workspace_id: Optional[str] = None):
+    def __init__(self, workspace_id: Optional[str] = None, config_dir=None):
         self.workspace_id = workspace_id
+        self.config_dir = config_dir
+
+    def _run(self, args, workspace_id=None):
+        return _run(args, workspace_id, config_dir=self.config_dir)
 
     def auth_status(self):
-        return _run(["auth", "status"])
+        return self._run(["auth", "status"])
 
     # ---- 用量 ----
     def usage_summary(self, days: int = 30):
-        return _run(["usage", "summary", "--days", str(days)], self.workspace_id)
+        return self._run(["usage", "summary", "--days", str(days)], self.workspace_id)
 
     def usage_stats(self, days: int = 30, model: Optional[str] = None):
         args = ["usage", "stats", "--days", str(days)]
         if model:
             args += ["--model", model]
-        return _run(args, self.workspace_id)
+        return self._run(args, self.workspace_id)
 
     def usage_free(self):
-        return _run(["usage", "free"], self.workspace_id)
+        return self._run(["usage", "free"], self.workspace_id)
 
     def usage_token_plan(self):
-        return _run(["usage", "token-plan"])
+        return self._run(["usage", "token-plan"])
 
     def usage_coding_plan(self):
-        return _run(["usage", "coding-plan"])
+        return self._run(["usage", "coding-plan"])
 
     # ---- Harness 权益 ----
     def harness_quota(self, type_: Optional[str] = None):
         args = ["token-plan", "harness-quota"]
         if type_:
             args += ["--type", type_]
-        return _run(args, self.workspace_id)
+        return self._run(args, self.workspace_id)
 
     def list_seats(self):
-        return _run(["token-plan", "list-seats"])
+        return self._run(["token-plan", "list-seats"])
 
     # ---- 监控 ----
     def monitor_overview(self):
-        return _run(["monitor", "overview"], self.workspace_id)
+        return self._run(["monitor", "overview"], self.workspace_id)
 
     def monitor_models(self):
-        return _run(["monitor", "models"], self.workspace_id)
+        return self._run(["monitor", "models"], self.workspace_id)
 
     # ---- 工作区 ----
     def workspace_list(self):
-        return _run(["workspace", "list"])
+        return self._run(["workspace", "list"])

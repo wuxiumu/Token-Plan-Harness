@@ -9,8 +9,8 @@
 import time
 
 from ..adapters.bailian_cli import BailianCli
+from . import cache_settings
 
-CACHE_TTL = 300  # 5 分钟
 
 _cache = {"ts": 0, "data": None}
 
@@ -61,7 +61,7 @@ def _normalize(raw: dict) -> dict:
 
 def get_quota(force: bool = False) -> dict:
     now = time.time()
-    if force or not _cache["data"] or (now - _cache["ts"] > CACHE_TTL):
+    if force or not _cache["data"] or (now - _cache["ts"] >= cache_settings.ttl_seconds()):
         try:
             raw = BailianCli().harness_quota()
         except Exception:  # noqa: BLE001

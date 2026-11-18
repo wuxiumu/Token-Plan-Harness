@@ -16,5 +16,4 @@ if [ ! -d .venv ]; then
   ./.venv/bin/pip install -r requirements.txt -q
 fi
 
-echo "[run] 启动服务: http://127.0.0.1:8000"
-exec ./.venv/bin/uvicorn backend.app:app --host 127.0.0.1 --port 8000 "$@"
+exec ./.venv/bin/python scripts/workbench.py "${@:-start}"

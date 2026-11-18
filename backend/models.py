@@ -15,6 +15,10 @@ class KeyItem(BaseModel):
     workspace_id: Optional[str] = None
     models: list[str] = Field(default_factory=list)
     note: str = ""
+    used_percent: Optional[float] = Field(default=None, ge=0, le=100)
+    resets_at: Optional[str] = None
+    source: str = "manual"
+    trial_only: bool = False   # 仅用于模型体验，不加入首页和配额
     status: str = "active"     # active | disabled | expired
     expire_at: Optional[str] = None
     created_at: str = ""
